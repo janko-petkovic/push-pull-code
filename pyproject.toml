@@ -4,7 +4,7 @@ version = "0.0.1"
 authors = [
   { name="Janko Petkovic", email="petkojan@uni-bonn.de" },
 ]
-description = "Modules used for the work in DOI"
+description = "Modules used for the code in 'push-and-pull' paper."
 readme = "README.md"
 requires-python = ">=3.11"
 classifiers = [
@@ -25,4 +25,4 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/janko-petkovic/rdn"
+"Homepage" = "https://github.com/janko-petkovic/push-pull-code"

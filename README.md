@@ -29,7 +29,7 @@ If you are using a Windows operating system, first install Windows Subsystem for
 
 1. Clone this repository via
 ```
-$ git clone ...
+$ git clone https://github.com/janko-petkovic/push-pull-code.git
 ```
 
 2. Move into the folder the repository was cloned in, and create a new virtual environment
