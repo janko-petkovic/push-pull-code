@@ -1,0 +1,9 @@
+ipykernel
+fides
+matplotlib
+pypesto
+torch
+statsmodels
+scikit_posthocs
+palettable
+scikit-image

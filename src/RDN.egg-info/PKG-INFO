@@ -1,0 +1,16 @@
+Metadata-Version: 2.1
+Name: RDN
+Version: 0.0.1
+Summary: Modules used for the work in DOI
+Author-email: Janko Petkovic <petkojan@uni-mainz.de>
+Project-URL: Homepage, https://github.com/janko-petkovic/rdn
+Classifier: Programming Language :: Python :: 3
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Operating System :: OS Independent
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+License-File: LICENSE
+
+# RDN
+
+Main PhD project.

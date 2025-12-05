@@ -1,0 +1,14 @@
+# Byte-compiled / optimized / DLL files
+*/__pycache__/*
+*.py[cod]
+*$py.class
+
+# tex auxiliary and output
+docs/*/output/*
+docs/*/output/aux/*
+
+# Fitting histories
+*/histories/*
+
+# Remove output tracking
+*.hdf5

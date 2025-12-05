@@ -1,0 +1,46 @@
+font.family : Open Sans
+
+axes.edgecolor : black
+axes.linewidth : 1
+axes.titlesize : 15
+axes.titleweight : normal
+axes.titlepad : 15
+axes.labelsize : 20  
+axes.labelpad : 10
+axes.axisbelow : True
+axes.formatter.limits : -3,3
+axes.formatter.use_mathtext : True
+axes.spines.left : True
+axes.spines.right : True
+axes.spines.top : True
+axes.prop_cycle :  cycler('color', ['164863', '427D9D','9BBEC8', 'DDF2FD'])
+axes.xmargin : 0
+
+xtick.top : True
+xtick.major.size : 5
+xtick.major.width : 1
+xtick.major.pad : 10
+xtick.labelsize : 15
+xtick.color : black
+xtick.direction : in
+
+ytick.right : True
+ytick.major.size : 5
+ytick.major.width : 1
+ytick.major.pad : 10
+ytick.labelsize : 15
+ytick.color : black
+ytick.direction : in
+
+legend.frameon : False
+
+# Line plots
+lines.linewidth : 3
+
+# Errorbar plots
+errorbar.capsize : 0
+
+# Hisogram plots
+hist.bins : 20
+
+
