@@ -1,12 +1,12 @@
-'''
+"""
 Abstract base model class
-'''
+"""
 
 from abc import ABC, abstractmethod
 import torch
 
-class BaseModel(ABC):
 
+class BaseModel(ABC):
     def __init__(self):
         pass
 
@@ -14,25 +14,23 @@ class BaseModel(ABC):
         return self.forward(nss_weights, t_mesh, x_mesh, p)
 
     def generate_nss_weights(self, nss, t, x) -> torch.Tensor:
-        nss_weights = torch.ones(len(x))*nss
-        nss_weights = torch.where(x<0, 2*nss-2, nss_weights)
-        nss_weights = torch.where(x>0, 2, nss_weights)
+        nss_weights = torch.ones(len(x)) * nss
+        nss_weights = torch.where(x < 0, 2 * nss - 2, nss_weights)
+        nss_weights = torch.where(x > 0, 2, nss_weights)
         nss_weights = torch.tile(nss_weights, (len(t), 1))
 
         return nss_weights
 
-
     @abstractmethod
     def forward(self, nss_weights, t_mesh, x_mesh, p):
         pass
-
 
     @abstractmethod
     def generate_parameter_names(self, t, x):
         pass
 
     @abstractmethod
-    def generate_parameter_guess(self, t, x, p_guess=10.):
+    def generate_parameter_guess(self, t, x, p_guess=10.0):
         pass
 
     @abstractmethod
@@ -46,9 +44,9 @@ class BaseModel(ABC):
 
     @abstractmethod
     def generate_boundary_conditions_for_multi(self, t, x):
-        '''
+        """
         Returns in order blb, gub, slb, gub
-        '''
+        """
         pass
 
     @abstractmethod
@@ -58,6 +56,3 @@ class BaseModel(ABC):
     @abstractmethod
     def generate_multi_profile_idxes(self, multi_result):
         pass
-
-
-

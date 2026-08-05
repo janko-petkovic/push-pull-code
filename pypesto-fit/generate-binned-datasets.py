@@ -1,52 +1,55 @@
-'''
+"""
 This script generates the binned datasets from to conduct the model fitting on starting
 from the data of Chater et al. 2024 (with the addition of the 5 stimulation protocol).
 To run it, just call
 
-python generate-binned-datasets.py 
+python generate-binned-datasets.py
 
 from the pypesto-fit folder.
 
 The binned datasets will be saved in the pypesto-fit/binned-data folder.
-'''
+"""
 
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 from rdn.dataloading import df_from_tool
-from rdn.defaults import default_goda_transformation, default_goda_filter, pd_bin_by_distance, mean_is_distance
+from rdn.defaults import (
+    default_goda_transformation,
+    default_goda_filter,
+    pd_bin_by_distance,
+    mean_is_distance,
+)
 
 
-if __name__ == '__main__':
-    
-    df = pd.read_pickle('../data/raw_data/raw_goda_data.pkl')
+if __name__ == "__main__":
+    df = pd.read_pickle("../data/raw_data/raw_goda_data.pkl")
 
-    df = df[df['drug']=='Control']
+    df = df[df["drug"] == "Control"]
     df = default_goda_transformation(df)
     df = default_goda_filter(df)
 
-    nsss = [1,3,5,7]
+    nsss = [1, 3, 5, 7]
 
     # Plotting for visual inspection
-    fig, axs = plt.subplots(1,4, figsize=(10,2))
+    fig, axs = plt.subplots(1, 4, figsize=(10, 2))
     fig.tight_layout(pad=2)
 
     for ax, nss in zip(axs, nsss):
-        dff = df[df['nss'] == nss].copy()
-        
+        dff = df[df["nss"] == nss].copy()
+
         # We stride the rolling windows using the mean interspine distance
         # found in the given experiment
         isd = mean_is_distance(dff)
-        binned_df = pd_bin_by_distance(dff, 'RID', isd)
-    
-        
-        t = np.array(df['Times'].iloc[0])
-        x = np.array(binned_df['distance'])
+        binned_df = pd_bin_by_distance(dff, "RID", isd)
 
-        data = np.stack(binned_df['mean'].to_list(), axis=0).T
-        data_errs = np.stack(binned_df['stderr'].to_list(), axis=0).T
-        counts = binned_df['count'].to_numpy()
+        t = np.array(df["Times"].iloc[0])
+        x = np.array(binned_df["distance"])
+
+        data = np.stack(binned_df["mean"].to_list(), axis=0).T
+        data_errs = np.stack(binned_df["stderr"].to_list(), axis=0).T
+        counts = binned_df["count"].to_numpy()
 
         # Control plot
         # control_idx = 3
@@ -68,4 +71,4 @@ if __name__ == '__main__':
 
     # plt.show()
 
-    print('[SUCCESS] Generated binned datasets.')
+    print("[SUCCESS] Generated binned datasets.")

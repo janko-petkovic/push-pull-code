@@ -8,15 +8,16 @@ import matplotlib.colors as colors
 from scikit_posthocs import posthoc_ttest
 
 
-
-def anova_t(data: list,
-                 data_labels: list,
-                 plot: bool = False,
-                 figsize: tuple = (8,4),
-                 dpi: float = 100,
-                 xlabel: str = 'groups',
-                 ylabel: str = 'value [A.U.]'):
-    '''
+def anova_t(
+    data: list,
+    data_labels: list,
+    plot: bool = False,
+    figsize: tuple = (8, 4),
+    dpi: float = 100,
+    xlabel: str = "groups",
+    ylabel: str = "value [A.U.]",
+):
+    """
     Kruskal-Wallis + dunn posthoc if KW is significant.
     Optionally plot a nice chart
 
@@ -40,7 +41,7 @@ def anova_t(data: list,
     ----
     Technically theres no need to do the Dunn if KW is non significant
     but whatever the plots are nice.
-    '''
+    """
 
     kw = stats.f_oneway(*data)
     dunn = posthoc_ttest(data)
@@ -50,43 +51,45 @@ def anova_t(data: list,
     # plot_dunn = np.ma.array(dunn.to_numpy(), mask=mask).T
     plot_dunn = dunn
 
-    fig, axs = plt.subplots(1,2, figsize=figsize, dpi=dpi)
-    fig.tight_layout(pad=5, rect=[0,0,1,1])
+    fig, axs = plt.subplots(1, 2, figsize=figsize, dpi=dpi)
+    fig.tight_layout(pad=5, rect=[0, 0, 1, 1])
 
     # Plot the bloxplot (what abuot a violinplot?)
     ax = axs[0]
     # sns.swarmplot(data, size=1, ax=ax, color='blue')
-    ax.boxplot(data, showfliers=True, whis=(5,95))
-    ax.set_title(f'Anova p-value={kw.pvalue:.3}')
+    ax.boxplot(data, showfliers=True, whis=(5, 95))
+    ax.set_title(f"Anova p-value={kw.pvalue:.3}")
     ax.set_xlabel(xlabel)
     # ax.set_xticks([i+1 for i in range(len(data_labels))])
     ax.set_xticklabels(data_labels, rotation=90)
     ax.set_ylabel(ylabel)
-    ax.ticklabel_format(axis='y', style='scientific', scilimits=(0,0))
+    ax.ticklabel_format(axis="y", style="scientific", scilimits=(0, 0))
 
     # Show the dunn results
-    ax=axs[1]
-    pc = ax.imshow(plot_dunn, cmap='coolwarm_r', norm=colors.CenteredNorm(0.05, 0.05))
+    ax = axs[1]
+    pc = ax.imshow(
+        plot_dunn, cmap="coolwarm_r", norm=colors.CenteredNorm(0.05, 0.05)
+    )
     fig.colorbar(pc, ax=ax, fraction=0.04, pad=0.1)
-    ax.set_title('Pairwise t-test p-values')
+    ax.set_title("Pairwise t-test p-values")
     ax.set_xticks([i for i in range(len(data_labels))])
     ax.set_yticks([i for i in range(len(data_labels))])
-    ax.set_xticks([i-0.5 for i in range(len(data_labels))], minor=True)
-    ax.set_yticks([i-0.5 for i in range(len(data_labels))], minor=True)
+    ax.set_xticks([i - 0.5 for i in range(len(data_labels))], minor=True)
+    ax.set_yticks([i - 0.5 for i in range(len(data_labels))], minor=True)
     ax.set_xticklabels(data_labels, rotation=90)
     ax.set_yticklabels(data_labels)
     # ax.grid(which='minor', color='black', linewidth=2)
-    ax.tick_params(which='minor', bottom=False, left=False)
+    ax.tick_params(which="minor", bottom=False, left=False)
 
     # plt.show()
 
     return kw, dunn, axs
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import numpy as np
-    
-    data = [np.random.rand(10)*10+i for i in range(10)]
-    data_labels= ([f'{i}' for i in range(10)])
+
+    data = [np.random.rand(10) * 10 + i for i in range(10)]
+    data_labels = [f"{i}" for i in range(10)]
     print(data_labels)
     kruskal_dunn(data, data_labels)

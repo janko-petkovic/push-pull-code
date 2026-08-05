@@ -1,7 +1,7 @@
-'''
+"""
 Checks if the underlying distribution is chi squared with a
 Lilliefors test on the square roots of the given distr values
-'''
+"""
 
 import numpy as np
 from statsmodels.stats.diagnostic import lilliefors
@@ -15,4 +15,3 @@ def check_chisquared(distr):
 
     test_res = lilliefors(root_distr)
     return test_res
-

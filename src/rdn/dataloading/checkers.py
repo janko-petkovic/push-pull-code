@@ -10,15 +10,12 @@ import scipy.stats as scs
 from .aux import eggl_import, eggl_transform
 
 
-
-def generate_check_t_series_corr(col_1: str,
-                                 col_2: str,
-                                 corr_type: str,
-                                 min_r: float,
-                                 max_p: float) -> Callable[[str],bool]:
+def generate_check_t_series_corr(
+    col_1: str, col_2: str, corr_type: str, min_r: float, max_p: float
+) -> Callable[[str], bool]:
     """
     Generate a function that checks if the t_series located in two different
-    columns of the dataframe generated from a path argument are correlated 
+    columns of the dataframe generated from a path argument are correlated
     for each row. We use this cos our data has t_series for luminosities and
     we transform these series (background subtraction, normalization, dunno)
     so we want to make sure that the transformations are good.
@@ -51,38 +48,40 @@ def generate_check_t_series_corr(col_1: str,
 
         # Build the spine dataframe (each row is a spine)
         df, bg = eggl_import(path)
-        df['egglRID'] = eggl_transform(df, bg)
+        df["egglRID"] = eggl_transform(df, bg)
 
         # Pick the correlation type
-        corr_f = scs.pearsonr if corr_type == 'pearson' else scs.spearmanr
-       
+        corr_f = scs.pearsonr if corr_type == "pearson" else scs.spearmanr
+
         # Check the correlations row by row
         for _, row in df.iterrows():
             r, p = corr_f(row[col_1], row[col_2])
-            if (r < min_r) or (p > max_p): 
+            if (r < min_r) or (p > max_p):
                 return False
 
         return True
 
     return check_t_series_corr
-    
 
 
-def generate_check_names_in_path(names: str) -> Callable[[str],bool]:
+def generate_check_names_in_path(names: str) -> Callable[[str], bool]:
 
     def check_names_in_path(path: str) -> bool:
         for name in names:
-            if name in path: return True
+            if name in path:
+                return True
 
         return False
 
     return check_names_in_path
 
-def generate_check_names_not_in_path(names: str) -> Callable[[str],bool]:
+
+def generate_check_names_not_in_path(names: str) -> Callable[[str], bool]:
 
     def check_names_not_in_path(path: str) -> bool:
         for name in names:
-            if name in path: return False
+            if name in path:
+                return False
 
         return True
 

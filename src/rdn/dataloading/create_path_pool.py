@@ -6,9 +6,12 @@ will be taken and dataframed subsequently
 import os
 from typing import Callable, Optional
 
-def create_path_pool(root: str,
-                     files_to_include: list[str],
-                     additional_checks: Optional[list[Callable]] = []) -> list[str]:
+
+def create_path_pool(
+    root: str,
+    files_to_include: list[str],
+    additional_checks: Optional[list[Callable]] = [],
+) -> list[str]:
     """
     Given a starting point (root) find all the folders that contain the
     necessary data (files_to_include) while respecting additional constraints
@@ -64,14 +67,14 @@ def create_path_pool(root: str,
         good_paths = temp_paths.copy()
 
     print(f"done!\n   Retreived {len(good_paths)} candidate paths. ")
-    
+
     #
     # Check names and attitional conditions
     # I should swap the loops but I want to log better
     #
-    
+
     if additional_checks:
-        print('\n-> Applying additional path checks...')
+        print("\n-> Applying additional path checks...")
         for check in additional_checks:
             print(f"   {check.__name__}:", end="")
             temp_paths = []
@@ -84,7 +87,7 @@ def create_path_pool(root: str,
                 else:
                     n_dropped += 1
                     dropped_str += f"\n      {path}"
-            
+
             good_paths = temp_paths
 
             if n_dropped:
@@ -93,16 +96,15 @@ def create_path_pool(root: str,
             else:
                 print(" all good!")
     else:
-        print('\n-> No additional path checks to be applied.')
+        print("\n-> No additional path checks to be applied.")
 
-    print(f'\n=> Final number of paths: {len(good_paths)}')
+    print(f"\n=> Final number of paths: {len(good_paths)}")
 
     return good_paths
 
+
 if __name__ == "__main__":
-    _ = create_path_pool(root = "/home/janko/code/protein-distr/KanaanProtData/",
-                         files_to_include=["Synapse_l", "ackground"])
-
-                
-
-    
+    _ = create_path_pool(
+        root="/home/janko/code/protein-distr/KanaanProtData/",
+        files_to_include=["Synapse_l", "ackground"],
+    )

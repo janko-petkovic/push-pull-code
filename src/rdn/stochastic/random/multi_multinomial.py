@@ -12,7 +12,7 @@ Validation with np.random.multinomial:
     2. samples generated with numpy and multi_multinomial
     * Ks (statistic = 0.0084, pvalue=0,872)
 
-    
+
 Quick time profiling against a for loop with np.random.multinomial():
     custom method scales better with the length of n
     n = 2: time = 1.25 numpy time
@@ -23,20 +23,20 @@ Quick time profiling against a for loop with np.random.multinomial():
 import numpy as np
 
 
-def _multi_multinomial(n: np.ndarray,
-                       pvals: np.ndarray) -> np.ndarray:
-    
+def _multi_multinomial(n: np.ndarray, pvals: np.ndarray) -> np.ndarray:
+
     # Calculate the binomial for the first event to happen
     results = []
-    first_event_counts = np.random.binomial(n, pvals[:,0])
-    n_left = n-first_event_counts
+    first_event_counts = np.random.binomial(n, pvals[:, 0])
+    n_left = n - first_event_counts
     results.append(first_event_counts)
 
     # If the complementary event has more than one event in it than recurr
     # the function using the remaining experiments and (normalized) pvals
-    if len(pvals[0,1:]) > 1: 
-        results += _multi_multinomial(n_left,
-                                      pvals[:,1:]/pvals[:,1:].sum(axis=1).reshape(-1,1))
+    if len(pvals[0, 1:]) > 1:
+        results += _multi_multinomial(
+            n_left, pvals[:, 1:] / pvals[:, 1:].sum(axis=1).reshape(-1, 1)
+        )
 
     else:
         results.append(n_left)
@@ -44,8 +44,7 @@ def _multi_multinomial(n: np.ndarray,
     return results
 
 
-def multi_multinomial(n: list[int],
-                      pvals: np.ndarray ) -> np.ndarray:
+def multi_multinomial(n: list[int], pvals: np.ndarray) -> np.ndarray:
     """
     Parameters
     ----------
@@ -62,9 +61,9 @@ def multi_multinomial(n: list[int],
 
     Returns
     -------
-    (N, p) numpy array 
-        An array of shape (N,p) with each row containing the the counts 
-        of the drawn samples for the corresponding n. 
+    (N, p) numpy array
+        An array of shape (N,p) with each row containing the the counts
+        of the drawn samples for the corresponding n.
     """
 
     # First cast everything into a numpy array
@@ -75,19 +74,21 @@ def multi_multinomial(n: list[int],
         raise ValueError("pvals has to be a matrix")
 
     # Check if it is compatible with n
-    if (len(pvals) != len(n)):
+    if len(pvals) != len(n):
         raise ValueError("Provided n and pvals are not compatible")
 
     # Check if any of the rows sum to more than 1
     pvals_sum = pvals.sum(axis=1)
-    if np.where(pvals_sum>1,1,0).any():
-        bad_idxes = np.where(pvals_sum>1)[0]
-        raise ValueError(f"Following pvalue rows add up to more than 1: {bad_idxes}")
+    if np.where(pvals_sum > 1, 1, 0).any():
+        bad_idxes = np.where(pvals_sum > 1)[0]
+        raise ValueError(
+            f"Following pvalue rows add up to more than 1: {bad_idxes}"
+        )
 
     # If rows do not add up to one, add the residue to the last
     # pval in the row
     residuals = 1 - pvals_sum
-    pvals[:,-1] += residuals
+    pvals[:, -1] += residuals
 
     # Check if the previous operation has gone wrong due to rounding errors
     pvals_sum = pvals.sum(axis=1)
@@ -95,13 +96,11 @@ def multi_multinomial(n: list[int],
     if fails.any():
         fail_idxes = np.where(fails)[0]
         raise ValueError(f"Following rows failed to add up to 1: {fail_idxes}")
-   
+
     return np.stack(_multi_multinomial(n, pvals), axis=0).T
 
 
-
-
-if __name__ == '__main__':
-    n = np.ones(10, dtype=int)*10
-    p = np.ones((10,5))*0.2
-    print(multi_multinomial(n,p))
+if __name__ == "__main__":
+    n = np.ones(10, dtype=int) * 10
+    p = np.ones((10, 5)) * 0.2
+    print(multi_multinomial(n, p))

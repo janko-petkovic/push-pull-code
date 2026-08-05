@@ -9,6 +9,7 @@ import os
 
 import pandas as pd
 import numpy as np
+
 # from pandas.core.series import ValueKeyFunc
 from scipy.stats import pearsonr
 
@@ -17,11 +18,9 @@ from .checkers import *
 from .aux import eggl_import, eggl_transform
 
 
-def df_from_tool(root: str,
-                 dataset: str,
-                 compartment: str) -> pd.DataFrame:
+def df_from_tool(root: str, dataset: str, compartment: str) -> pd.DataFrame:
     """
-    This is the final command that the user should be using to build a 
+    This is the final command that the user should be using to build a
     dataframe from a set of jsons created with the tool.
     Theoretically, we should decide on a tree structure that the tool should
     use to organize its output but for now I use the variable dataset to
@@ -56,40 +55,39 @@ def df_from_tool(root: str,
     partial loading (but I don't honestly think it is going to be too
     heavy to load as a single object).
     """
-    
+
     # Pick the path pattern to use for the data extraction
-    if dataset == 'goda': 
+    if dataset == "goda":
         pattern = r"CA1_(\d+(Spine|Distr))/(\w+)/cell_(\d+)"
-    elif dataset == 'helm':
+    elif dataset == "helm":
         pattern = r"(\w+)/merged/cell_(\d+)"
     else:
-        raise ValueError(f'Invalid dataset specified: {dataset}')
-        
-    if compartment == 'spine':
-        target_files = ['Synapse_l', 'ackground']
+        raise ValueError(f"Invalid dataset specified: {dataset}")
 
-    elif compartment == 'dendrite':
-        if dataset == 'goda': raise ValueError("Goda dataset has no dendritic compartment")
-        target_files = ['dend_stat', 'ackground']
+    if compartment == "spine":
+        target_files = ["Synapse_l", "ackground"]
+
+    elif compartment == "dendrite":
+        if dataset == "goda":
+            raise ValueError("Goda dataset has no dendritic compartment")
+        target_files = ["dend_stat", "ackground"]
     else:
-        raise ValueError(f'Invalid compartment: {compartment}')
-
-
+        raise ValueError(f"Invalid compartment: {compartment}")
 
     # Create the path pool
     # Files to be present in the directory paths
 
     # Check if the original and the background subtracted RID correlate
     # and exlude some uninteresting names
-    exc_names = generate_check_names_not_in_path(['_MACOSX'])
+    exc_names = generate_check_names_not_in_path(["_MACOSX"])
 
     additional_checks = [exc_names]
 
-    path_pool = create_path_pool(root = root,
-                                 files_to_include = target_files,
-                                 additional_checks = additional_checks)
-
-
+    path_pool = create_path_pool(
+        root=root,
+        files_to_include=target_files,
+        additional_checks=additional_checks,
+    )
 
     # Build the dataframe from the path_pool
     df_list = []
@@ -97,119 +95,115 @@ def df_from_tool(root: str,
     # We will use this later for logging
     n_dropped_rows = 0
     n_dropped_cells = 0
-    
+
     print("\n-> Applying additional dataframe checks...")
 
-
     #################################
-    # MAIN LOOP 
+    # MAIN LOOP
     # Path by path.
     # If all the checks pass, we append the resulting dataframe to the
     # list of dataframes to concatenate in the end
     #################################
     for path in path_pool:
-        
         # Import the data corpus
         # This is probably extremely stupid but whatever for now
         df = bg = None
         for target in target_files:
             for file in os.listdir(path):
                 if target in file:
-                    if 'json' in file and file[0] != '.':
+                    if "json" in file and file[0] != ".":
                         df = pd.read_json(os.path.join(path, file))
-                        if compartment == 'dendrite':
+                        if compartment == "dendrite":
                             df = df.T
-                    if 'M.npy' in file and file[0] != '.':
+                    if "M.npy" in file and file[0] != ".":
                         bg = np.load(os.path.join(path, file)).squeeze()
 
         if 0 in df.shape:
-            print(path, ' empty .json!')
-            continue 
+            print(path, " empty .json!")
+            continue
 
         # BACKGROUND CHECK
         # See if we can subtract the background (cannot for now)
         try:
-            if compartment == 'spine' and dataset == 'goda':
+            if compartment == "spine" and dataset == "goda":
                 # We really have to fix that background thing
                 # df['egglRID'] = df['RawIntDen']
-                df['egglRID'] = eggl_transform(df, bg)
+                df["egglRID"] = eggl_transform(df, bg)
             else:
-                df['egglRID'] = df['RawIntDen']
+                df["egglRID"] = df["RawIntDen"]
 
         except Exception as err:
             print(path, err)
             continue
 
-
         # PARSING CHECK
         # Get the additional information depending on the dataset in use
         match = re.search(pattern, path)
-        
-        if dataset == 'goda':
+
+        if dataset == "goda":
             # Get number of stimulations, drug and cell informations
             try:
-                df['nss'] = match[1]
-                df['drug'] = match[3]
-                df['cell'] = match[4]
+                df["nss"] = match[1]
+                df["drug"] = match[3]
+                df["cell"] = match[4]
             except:
                 print(f"Failed matching at {path}")
                 continue
 
-        if dataset == 'helm':
+        if dataset == "helm":
             try:
-                df['protein'] = match[1]
-                df['cell'] = match[2]
+                df["protein"] = match[1]
+                df["cell"] = match[2]
             except:
                 print(f"Failed matching at {path}")
                 continue
-                
-                
 
         # GLOBAL DATAFRAME CHECKS
 
         # Check list consistency:
         # Same time point number
-        if dataset == 'goda':
-            
+        if dataset == "goda":
             # Check for consistent time points
-            t_points = df['egglRID'].map(lambda x: len(x))
-            
+            t_points = df["egglRID"].map(lambda x: len(x))
+
             if (t_points.nunique() != 1) or (t_points.iloc[0] != 8):
-                print(f"Different time points in {path}, might want to check that out")
+                print(
+                    f"Different time points in {path}, might want to check that out"
+                )
                 continue
-        
+
         # Same number of channels
-        if dataset == 'helm':
-            n_channels = df['egglRID'].map(lambda x: len(x))
-            
+        if dataset == "helm":
+            n_channels = df["egglRID"].map(lambda x: len(x))
+
             if (n_channels.nunique() != 1) or (n_channels.iloc[0] != 4):
-                print(f"Different channels in {path}, might want to check that out")
-
-
+                print(
+                    f"Different channels in {path}, might want to check that out"
+                )
 
         # CELL DATAFRAME CHECKS
 
         # Check if the number of stimulations is actually right. If not
         # drop the wrong cell
-        if dataset == 'goda':
-
+        if dataset == "goda":
             # Get the number of stimulations
-            nss = int(re.match('\d+', df.loc[0, 'nss'])[0])
+            nss = int(re.match("\d+", df.loc[0, "nss"])[0])
 
-            for cell in df['cell'].unique():
-                cdf = df[df['cell']==cell]
-                actual_nss = cdf[cdf['type'] == 'Stim'].shape[0]
+            for cell in df["cell"].unique():
+                cdf = df[df["cell"] == cell]
+                actual_nss = cdf[cdf["type"] == "Stim"].shape[0]
 
                 if abs(actual_nss - nss) > 1:
-                    print(f'Inconsistent stims in {nss} - cell {cell} : {actual_nss}')
-                    df = df[df['cell'] != cell]
+                    print(
+                        f"Inconsistent stims in {nss} - cell {cell} : {actual_nss}"
+                    )
+                    df = df[df["cell"] != cell]
                     n_dropped_cells += 1
 
         # Row by row checks (drop row if failed)
         # I dropped the checks on the EgglRID as i am not using it for now
         temp = []
         for idx, row in df.iterrows():
-
             # Check if there are negative or NaN values in egglRID
             # try:
             #     for val in row['egglRID']:
@@ -231,9 +225,7 @@ def df_from_tool(root: str,
             #     continue
 
             temp.append(row)
-            
 
-            
         # Additional row checks ended, append whats left of the dataframe
         # to the final dataframe list
         if not temp:
@@ -241,31 +233,41 @@ def df_from_tool(root: str,
             continue
 
         df = pd.DataFrame(temp)
-            
-            
+
         # Keep the ones with 8 time points anyway.
         # Moreover here we specify what stuff we are interested in
-        if dataset == 'goda':
+        if dataset == "goda":
             # ATTENTION: dropped the use of egglRID because of the reduction in potentiation of stim spines
-            df_list.append(df[['nss','drug','cell','type','distance','area','Times','RawIntDen','egglRID']][t_points==8])
-            
-            
+            df_list.append(
+                df[
+                    [
+                        "nss",
+                        "drug",
+                        "cell",
+                        "type",
+                        "distance",
+                        "area",
+                        "Times",
+                        "RawIntDen",
+                        "egglRID",
+                    ]
+                ][t_points == 8]
+            )
 
-        if dataset == 'helm':
-            df_list.append(df[['protein','cell','egglRID','area']])
-            
+        if dataset == "helm":
+            df_list.append(df[["protein", "cell", "egglRID", "area"]])
+
     print(f"   Dropped {n_dropped_cells} cells.")
     print(f"   Dropped {n_dropped_rows} rows.")
 
-    final_df = pd.concat(df_list).reset_index(drop=True) 
+    final_df = pd.concat(df_list).reset_index(drop=True)
 
     print(f"\n=> Final dataframe size: {final_df.shape}")
     return final_df
 
-    
-    
-if __name__ == "__main__":
-    
-    df = df_from_tool("data/helm-spine-proteins", compartment='spine', dataset='helm')
-    # df = df_from_tool("/home/janko/data-hangar/HeteroSynDataModel/TomData", dataset='goda', compartment='spine')
 
+if __name__ == "__main__":
+    df = df_from_tool(
+        "data/helm-spine-proteins", compartment="spine", dataset="helm"
+    )
+    # df = df_from_tool("/home/janko/data-hangar/HeteroSynDataModel/TomData", dataset='goda', compartment='spine')

@@ -1,7 +1,8 @@
 import tkinter as tk
 from guisrc.windows import MainWindow
 import matplotlib.pyplot as plt
-plt.style.use('guisrc.windows.guistyle')
+
+plt.style.use("guisrc.windows.guistyle")
 
 
 def main():
@@ -12,8 +13,9 @@ def main():
 
     root = tk.Tk()
     root.protocol("WM_DELETE_WINDOW", _quit)
-    main_window = MainWindow(root).pack(side='top', fill='both', expand=True)
+    main_window = MainWindow(root).pack(side="top", fill="both", expand=True)
     root.mainloop()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
