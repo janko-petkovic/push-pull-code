@@ -67,7 +67,7 @@ def _(LocalGaussModelTilde, pardict_from_result):
     # Usual accounting for shorter dendrite
     # As discussed
     model_p_dict["tau_K"] = model_p_dict["tau_K"] * 2
-    return
+    return (model_p_dict,)
 
 
 @app.cell(hide_code=True)
@@ -99,6 +99,7 @@ def _(edf, gdf, np, pd):
         log_pre = np.log(df['pre'])
 
         df['pre'] = np.exp((log_pre - log_pre.mean())/log_pre.std())
+        # df['pre'] = df['pre'] / df['pre'].max()
         return df
 
     df = pd.concat(
@@ -126,6 +127,27 @@ def _(mo):
 
 
 @app.cell
+def _(model_p_dict, np):
+    mpd = model_p_dict
+
+    muk = mpd['mu_log_K_N'][0]
+    sigmak = np.sqrt(mpd['cov_log_K_N'][0,0])
+    mun = mpd['mu_log_K_N'][1]
+    sigman = np.sqrt(mpd['cov_log_K_N'][1,1])
+    deltak = mpd['Ks']
+    deltan = mpd['Ns']
+    pi = mpd['Pi']
+
+
+    rho = mpd['cov_log_K_N'][0,1] / sigmak / sigman
+    sbar = (rho * sigmak - sigman) / (sigmak**2 + sigman**2 - 2 * rho * sigmak * sigman)
+
+    e50 = np.exp(-mun * (1 - sbar) - muk * sbar)
+
+    return deltak, deltan, e50, muk, mun, pi, rho, sbar, sigmak, sigman
+
+
+@app.cell
 def _(df, least_squares, np):
     def model_gamma_median(x,p):
         p = 10**p
@@ -133,11 +155,11 @@ def _(df, least_squares, np):
         deltak = p[0]
         deltan = p[1]
         sbar = p[2]
-        eps = p[3]
-    
+        e50 = p[3]
+
         return (
-            (1 + deltak * deltan * eps * x**(sbar - 1))
-            / (1 * (1 + deltan * eps * x**(sbar)))
+            (1 + deltak * e50 * x**(sbar - 1))
+            / (1 + deltan * e50 * x**(sbar))
         )
 
     def model_gamma_q(x,p,f):
@@ -146,31 +168,24 @@ def _(df, least_squares, np):
         deltak = p[0]
         deltan = p[1]
         sbar = p[2]
-        eps = p[3] * np.exp(f)
-    
+        e50 = p[3] * np.exp(f)
+
         return (
-            (1 + deltak * deltan * eps * x**(sbar - 1))
-            / (1 * (1 + deltan * eps * x**(sbar)))
+            (1 + deltak * e50 * x**(sbar - 1))
+            / (1 + deltan * e50 * x**(sbar))
         )
 
     def model_gamma_mean(x, p):
         # p = 10**p
         return p[0] * x ** (-p[1])
 
-    def model_delta_median(x, p):
-        # p = 10**p
-        return (
-            (p[0] - x)
-            / (1 + p[1]*x**(p[2]))
-        )
 
 
     def residual(p, X, Y, model):
         return Y - model(X, p)
 
     res_rdn = {
-        'gamma' : least_squares(residual, -np.ones(5)*1, args=(df['pre'], df['gamma'], model_gamma_median), loss='soft_l1'),
-        'delta' : least_squares(residual, np.ones(5), args=(df['pre'], df['delta'], model_delta_median), loss='soft_l1'),
+        'gamma' : least_squares(residual, -np.ones(4), args=(df['pre'], df['gamma'], model_gamma_median), loss='soft_l1'),
     }
 
     res_power = {
@@ -182,42 +197,7 @@ def _(df, least_squares, np):
         model_gamma_q,
         res_power,
         res_rdn,
-        residual,
     )
-
-
-@app.cell
-def _(df, least_squares, model_gamma_median, np, residual):
-    from tqdm import tqdm
-
-    rng = np.random.default_rng(2026)
-    starts = rng.uniform(-5,1,size=(100,5))
-    criterions = []
-    pars = []
-
-    for p0 in tqdm(starts):
-        res = least_squares(residual, p0, args=(df['pre'], df['gamma'], model_gamma_median), loss='soft_l1')
-        criterions.append(res.cost)
-        pars.append(res.x)
-
-
-    
-    return criterions, pars
-
-
-@app.cell
-def _(criterions, np, pars, plt):
-    indexes = np.argsort(criterions)
-    # c = criterions[indexes]
-    # p = pars[indexes]
-    c = np.array(criterions)[indexes]
-    p = np.array(pars)[indexes]
-
-    # plt.plot(c)
-
-    plt.plot(10**p[10:])
-    # p[0]
-    return
 
 
 @app.cell
@@ -240,7 +220,7 @@ def _(df, np, pd):
 
         return f
 
-    
+
     def coverage_med(x):
         x = x.sort_values()
 
@@ -253,7 +233,7 @@ def _(df, np, pd):
         ci3 = x.iloc[34] - x.iloc[24]
 
         return np.sqrt(ci1**2 + ci3**2)
-    
+
 
     cbins, _bins = pd.qcut(df['pre'], q=10, retbins=True)
     bins = np.convolve(_bins, 0.5*np.ones(2), mode='valid')
@@ -265,7 +245,10 @@ def _(
     bins,
     cbins,
     coverage,
+    deltak,
+    deltan,
     df,
+    e50,
     model_gamma_mean,
     model_gamma_median,
     model_gamma_q,
@@ -273,6 +256,7 @@ def _(
     plt,
     res_power,
     res_rdn,
+    sbar,
 ):
     def _plotter(df, key):
 
@@ -291,56 +275,91 @@ def _(
             iq_h = coverage('iq', 'high'),
             mean = 'sem',
         )
-    
-        fig, axs = plt.subplots(2,3, figsize=(12,6))
-        xx = np.linspace(0.14, 11, 100)
-    
+
+        fig, axs = plt.subplots(3,3, figsize=(12,9))
+        xx = np.linspace(0.12, 11, 100)
+
         ax = axs[0,0]
         ax.scatter(df['pre'], df[key], s=10, alpha=0.1, c='black', lw=0)
-        ax.plot(bins, y['med'], color='black', lw=3)
-        ax.plot(bins, y['q1'], color='black', lw=1, linestyle=(0,(8,3)))
+        ax.plot(bins, y['med'], color='black', lw=3, label='Data median')
+        ax.plot(bins, y['q1'], color='black', lw=1, linestyle=(0,(8,3)), label='Data IQ')
         ax.plot(bins, y['q3'], color='black', lw=1, linestyle=(0,(8,3)))
-    
-        ax.plot(xx, model_gamma_median(xx, res_rdn['gamma'].x), color='tab:blue', lw=3, zorder=0)
+
+        ax.plot(xx, model_gamma_median(xx, res_rdn['gamma'].x), color='tab:blue', lw=3, zorder=0, label='Model median')
         ax.fill_between(
             xx, 
-            model_gamma_q(xx, res_rdn[key].x, -0.75),
-            model_gamma_q(xx, res_rdn[key].x, 0.75),
-            color='tab:blue', lw=3, alpha=0.2,
+            model_gamma_q(xx, res_rdn[key].x, 0.83),
+            model_gamma_q(xx, res_rdn[key].x, -0.83),
+            color='tab:blue', alpha=0.2,
+            lw=0,
+            label='Model IQ',
+        )
+
+        ax.legend(frameon=False, fontsize=9)
+        ax.set_ylim(0.2, 5)
+    
+
+        ax = axs[0,1]
+        ax.errorbar(bins, y['med'], yerr=ye[['med_l', 'med_h']].T, c='black', fmt='o', label='Data')
+        ax.plot(xx, model_gamma_median(xx, res_rdn[key].x), color='tab:blue', lw=3, zorder=0, label='Model')
+        ax.legend(frameon=False, fontsize=9)
+
+        ax = axs[0,2]
+        ax.errorbar(bins, y['q3'] - y['q1'], yerr=ye[['med_l', 'med_h']].T, c='black', fmt='o', label='Data')
+        ax.plot(xx, model_gamma_q(xx, res_rdn[key].x, 0.83) - model_gamma_q(xx, res_rdn[key].x, -0.83), color='tab:blue', lw=3, zorder=0, label='Model')
+        ax.legend(frameon=False, fontsize=9)
+
+        ax = axs[1,1]
+        ax.errorbar(bins, y['med'], yerr=ye[['med_l', 'med_h']].T, c='black', fmt='o', label='Data')
+        ax.plot(
+            xx, 
+            model_gamma_median(xx, np.array((np.log10(deltak),np.log10(deltan),np.log10(-sbar), np.log10(e50*7021),))), 
+            color='tab:blue', lw=3, zorder=0, label='Model'
         )
     
-        ax = axs[0,1]
-        ax.errorbar(bins, y['med'], yerr=ye[['med_l', 'med_h']].T, c='black')
-        ax.plot(xx, model_gamma_median(xx, res_rdn[key].x), color='tab:blue', lw=3, zorder=0)
+        ax.legend(frameon=False, fontsize=9)
     
-        ax = axs[0,2]
-        ax.errorbar(bins, y['q3'] - y['q1'], yerr=ye[['med_l', 'med_h']].T, c='black')
-        ax.plot(xx, model_gamma_q(xx, res_rdn[key].x, 0.75) - model_gamma_q(xx, res_rdn[key].x, -0.75), color='tab:blue', lw=3, zorder=0)
-    
-        ax = axs[1,0]
+        ax = axs[2,0]
         ax.scatter(df['pre'], df[key], s=10, alpha=0.1, c='black', lw=0)
-        ax.plot(bins, y['mean'], color='black', lw=3)
-        ax.plot(bins, y['mean']-y['std'], color='black', lw=1, linestyle=(0,(8,3)))
+        ax.plot(bins, y['mean'], color='black', lw=3, label='Data Mean')
+        ax.plot(bins, y['mean']-y['std'], color='black', lw=1, linestyle=(0,(8,3)), label='Data SEM')
         ax.plot(bins, y['mean']+y['std'], color='black', lw=1, linestyle=(0,(8,3)))
-        ax.plot(xx, model_gamma_mean(xx, res_power[key].x), color='tab:red', lw=3, zorder=0)
+        ax.plot(xx, model_gamma_mean(xx, res_power[key].x), color='tab:red', lw=3, zorder=0, label='Power model mean')
+        ax.legend(frameon=False, fontsize=9)
+        ax.set_ylim(0.2, 5)
     
-        ax = axs[1,1]
-        ax.errorbar(bins, y['mean'], yerr=ye['mean'].T, c='black')
-        ax.plot(xx, model_gamma_mean(xx, res_power[key].x), color='tab:red', lw=3, zorder=0)
-    
-    
+        ax = axs[2,1]
+        ax.errorbar(bins, y['mean'], yerr=ye['mean'].T, c='black', label='Data', fmt='o')
+        ax.plot(xx, model_gamma_mean(xx, res_power[key].x), color='tab:red', lw=3, zorder=0, label='Power model')
+        ax.legend(frameon=False, fontsize=9)
+
+        axs[0,0].set_title('Plasticity response ratio')
+        axs[0,1].set_title('Median of ratio')
+        axs[0,2].set_title('IQ of the ratio')
+        axs[2,0].set_title('Plasticity response ratio')
+        axs[2,1].set_title('Mean of ratio')
+        axs[2,2].remove()
+
         for ax in axs.flatten():
-            # ax.set_xlim(0.1,12)
-            # ax.set_ylim(0.3, 5)
+            ax.set_xlabel('Basal size')
+            ax.set_ylabel('Post-basal ratio')
+            ax.set_xlim(0.1,12)
             ax.set_xscale('log')
             # ax.set_yscale('log')
 
+        fig.subplots_adjust(hspace=0.5, wspace=0.3)
+    
         return axs
 
 
     _plotter(df, 'gamma')
-    # axs = plotter(df, 'delta')
     plt.show()
+    return
+
+
+@app.cell
+def _(muk, mun, np, pi, rho, sbar, sigmak, sigman):
+    (np.exp(muk - mun + (sigmak**2 + sigman**2 - 2 * rho * sigmak * sigman)/2) * 100 / pi)**sbar
     return
 
 
@@ -373,16 +392,16 @@ def _(
             iq_h = coverage('iq', 'high'),
             mean = 'sem',
         )
-    
+
         fig, axs = plt.subplots(2,3, figsize=(12,6))
         xx = np.linspace(0.14, 11, 100)
-    
+
         ax = axs[0,0]
         ax.scatter(df['pre'], df[key], s=10, alpha=0.1, c='black', lw=0)
         ax.plot(bins, y['med'], color='black', lw=3)
         ax.plot(bins, y['q1'], color='black', lw=1, linestyle=(0,(8,3)))
         ax.plot(bins, y['q3'], color='black', lw=1, linestyle=(0,(8,3)))
-    
+
         ax.plot(xx, model_gamma_median(xx, res_rdn['gamma'].x), color='tab:blue', lw=3, zorder=0)
         ax.fill_between(
             xx, 
@@ -390,16 +409,16 @@ def _(
             model_gamma_q(xx, res_rdn[key].x, 0.75),
             color='tab:blue', lw=3, alpha=0.2,
         )
-    
+
         ax = axs[0,1]
         ax.errorbar(bins, y['med'], yerr=ye[['med_l', 'med_h']].T, c='black')
         ax.plot(xx, model_gamma_median(xx, res_rdn[key].x), color='tab:blue', lw=3, zorder=0)
-    
+
         ax = axs[0,2]
         ax.errorbar(bins, y['q3'] - y['q1'], yerr=ye[['med_l', 'med_h']].T, c='black')
         ax.plot(xx, model_gamma_q(xx, res_rdn[key].x, 0.75) - model_gamma_q(xx, res_rdn[key].x, -0.75), color='tab:blue', lw=3, zorder=0)
-    
-    
+
+
         for ax in axs.flatten():
             # ax.set_xlim(0.1,12)
             # ax.set_ylim(0.3, 5)
@@ -412,6 +431,12 @@ def _(
     _plotter(df, 'delta')
     # axs = plotter(df, 'delta')
     plt.show()
+    return
+
+
+@app.cell
+def _(res_rdn):
+    10**res_rdn['gamma'].x
     return
 
 
