@@ -143,7 +143,6 @@ def _(model_p_dict, np):
     sbar = (rho * sigmak - sigman) / (sigmak**2 + sigman**2 - 2 * rho * sigmak * sigman)
 
     e50 = np.exp(-mun * (1 - sbar) - muk * sbar)
-
     return deltak, deltan, e50, muk, mun, pi, rho, sbar, sigmak, sigman
 
 
@@ -297,7 +296,7 @@ def _(
 
         ax.legend(frameon=False, fontsize=9)
         ax.set_ylim(0.2, 5)
-    
+
 
         ax = axs[0,1]
         ax.errorbar(bins, y['med'], yerr=ye[['med_l', 'med_h']].T, c='black', fmt='o', label='Data')
@@ -316,9 +315,9 @@ def _(
             model_gamma_median(xx, np.array((np.log10(deltak),np.log10(deltan),np.log10(-sbar), np.log10(e50*7021),))), 
             color='tab:blue', lw=3, zorder=0, label='Model'
         )
-    
+
         ax.legend(frameon=False, fontsize=9)
-    
+
         ax = axs[2,0]
         ax.scatter(df['pre'], df[key], s=10, alpha=0.1, c='black', lw=0)
         ax.plot(bins, y['mean'], color='black', lw=3, label='Data Mean')
@@ -327,7 +326,7 @@ def _(
         ax.plot(xx, model_gamma_mean(xx, res_power[key].x), color='tab:red', lw=3, zorder=0, label='Power model mean')
         ax.legend(frameon=False, fontsize=9)
         ax.set_ylim(0.2, 5)
-    
+
         ax = axs[2,1]
         ax.errorbar(bins, y['mean'], yerr=ye['mean'].T, c='black', label='Data', fmt='o')
         ax.plot(xx, model_gamma_mean(xx, res_power[key].x), color='tab:red', lw=3, zorder=0, label='Power model')
@@ -348,7 +347,7 @@ def _(
             # ax.set_yscale('log')
 
         fig.subplots_adjust(hspace=0.5, wspace=0.3)
-    
+
         return axs
 
 
@@ -662,6 +661,11 @@ def _(YY, cbins_1):
 @app.cell
 def _(XX, YY, plt):
     plt.scatter(XX.iloc[:38], YY.iloc[:38])
+    return
+
+
+@app.cell
+def _():
     return
 
 

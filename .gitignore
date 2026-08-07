@@ -10,5 +10,6 @@ docs/*/output/aux/*
 # Fitting histories
 */histories/*
 
-# Remove output tracking
-*.hdf5
+# Notebook checkounts and marimo cache
+*/.ipynb_checkpoints/*
+*/__marimo__/*
