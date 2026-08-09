@@ -1770,7 +1770,7 @@ wheels = [
 
 [[package]]
 name = "pypesto"
-version = "0.6.0"
+version = "0.4.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cloudpickle" },
@@ -1786,7 +1786,7 @@ dependencies = [
     { name = "tabulate" },
     { name = "tqdm" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f5/13/cb4cd6540e4a2018fa134d7ded31eaa72ff22cdc93cfa620241e9b5212e6/pypesto-0.6.0.tar.gz", hash = "sha256:47e4dfa31e8eab459914554231c620e269a648cb3e11ee38327c97419b292eee", size = 347390, upload-time = "2026-03-19T07:10:21.984Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/19/85/a35130e4fcca1966e388e6bc6a89634e245b8a28239632368878559511cf/pypesto-0.4.2.tar.gz", hash = "sha256:d4c2409768294a06b0a2b2cef0e03843e0fee6102fb414ed235090509f446aab", size = 300476, upload-time = "2024-04-15T18:10:46.034Z" }
 
 [[package]]
 name = "python-dateutil"
@@ -1951,7 +1951,7 @@ requires-dist = [
     { name = "marimo", specifier = ">=0.23.16" },
     { name = "matplotlib" },
     { name = "palettable" },
-    { name = "pypesto" },
+    { name = "pypesto", specifier = "==0.4.2" },
     { name = "scikit-image" },
     { name = "scikit-posthocs" },
     { name = "statsmodels" },

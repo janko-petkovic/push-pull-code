@@ -16,7 +16,7 @@ dependencies = [
     "ipykernel",
     "fides",
     "matplotlib",
-    "pypesto",
+    "pypesto==0.4.2",
     "torch",
     "statsmodels",
     "scikit_posthocs",

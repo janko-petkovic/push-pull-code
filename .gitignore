@@ -13,3 +13,6 @@ docs/*/output/aux/*
 # Notebook checkounts and marimo cache
 */.ipynb_checkpoints/*
 */__marimo__/*
+
+# Simulation results
+*.hdf5

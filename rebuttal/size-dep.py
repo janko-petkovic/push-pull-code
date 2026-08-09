@@ -79,22 +79,26 @@ def _(mo):
 
 
 @app.cell
-def _(pd):
-    # bdf = pd.read_csv(
-    #     "data/validation_data/chindemi_data/banerjee.csv",
-    # ).rename({'x':'pre', ' y':'gamma'})
-    edf = pd.read_csv(
-        "data/validation_data/chindemi_data/egger.csv"
-    ).rename(columns={'x':'pre', ' y':'gamma'})
+def _(np, pd):
+    dflist = []
+    dflist.append(pd.read_csv("data/validation_data/chindemi_data/banerjee.csv").rename(columns={'x':'pre', ' y':'gamma'}))
+    dflist.append(pd.read_csv("data/validation_data/chindemi_data/egger.csv").rename(columns={'x':'pre', ' y':'gamma'}))
+    dflist.append(pd.read_csv("data/validation_data/goda_data/stim_norm_2_vs_base.csv").rename(columns={'base_RID':'pre', 'norm_2':'gamma'}))
 
-    gdf = pd.read_csv(
-        "data/validation_data/goda_data/stim_norm_2_vs_base.csv"
-    ).rename(columns={'base_RID':'pre', 'norm_2':'gamma'})
-    return edf, gdf
+    for i, df in enumerate(dflist):
+        dflist[i]['log_gamma'] = np.log(df['gamma'])
+        dflist[i]['post'] = df['pre'] * df['gamma']
 
+        log_pre = np.log(df['pre'])
+        dflist[i]['stz_pre'] = np.exp((log_pre - log_pre.mean())/log_pre.std())
 
-@app.cell
-def _(edf, gdf, np, pd):
+    
+    index_list = []
+    for _dff, name in zip(dflist, ('bdf', 'edf', 'gdf')):
+        index_list += [(name, i) for i in _dff.index]
+    
+    indexes = pd.MultiIndex.from_tuples(index_list, names=['set', 'idx'])
+
     def standardize_pre(df):
         log_pre = np.log(df['pre'])
 
@@ -102,13 +106,13 @@ def _(edf, gdf, np, pd):
         # df['pre'] = df['pre'] / df['pre'].max()
         return df
 
-    df = pd.concat(
-        [standardize_pre(dff) for dff in [edf, gdf]]
-    )
 
-    df['post'] = df['pre'] * df['gamma']
-    df['delta'] = df['post'] - df['pre']
-    df
+    df = pd.DataFrame(
+        pd.concat(standardize_pre(d) for d in dflist),
+    ).reset_index(drop=True).set_index(indexes)
+
+    df.loc[['bdf', 'gdf'], 'gamma']
+
     return (df,)
 
 
@@ -161,6 +165,9 @@ def _(df, least_squares, np):
             / (1 + deltan * e50 * x**(sbar))
         )
 
+    def model_gamma_log_median(x,p):
+        return np.log(model_gamma_median(x,p))
+
     def model_gamma_q(x,p,f):
         p = 10**p
         # p = pp
@@ -175,28 +182,102 @@ def _(df, least_squares, np):
         )
 
     def model_gamma_mean(x, p):
-        # p = 10**p
-        return p[0] * x ** (-p[1])
+        p = 10**p
+        return 1 + p[0] * x ** (-p[1])
 
+    def model_gamma_log_mean(x, p):
+        return np.log(model_gamma_mean(x,p))
 
 
     def residual(p, X, Y, model):
         return Y - model(X, p)
 
     res_rdn = {
-        'gamma' : least_squares(residual, -np.ones(4), args=(df['pre'], df['gamma'], model_gamma_median), loss='soft_l1'),
+        'log_gamma' : least_squares(residual, -np.ones(4), args=(df.loc[['edf','gdf']]['stz_pre'], df.loc[['edf','gdf']]['log_gamma'], model_gamma_log_median), loss='linear'),
+        'log_gamma_gdf' : least_squares(residual, -np.ones(4), args=(df.loc[['gdf']]['stz_pre'], df.loc[['gdf']]['log_gamma'], model_gamma_log_median), loss='linear'),
+        'log_gamma_bdf' : least_squares(residual, -np.ones(4), args=(df.loc[['bdf']]['stz_pre'], df.loc[['bdf']]['log_gamma'], model_gamma_log_median), loss='linear'),
+        'log_gamma_edf' : least_squares(residual, -np.ones(4), args=(df.loc[['edf']]['stz_pre'], df.loc[['edf']]['log_gamma'], model_gamma_log_median), loss='linear'),
     }
 
     res_power = {
-        'gamma' : least_squares(residual, (1.,1.,1.), args=(df['pre'], df['gamma'], model_gamma_mean))    
+        'log_gamma' : least_squares(residual, -np.ones(4), args=(df.loc[['edf','gdf']]['stz_pre'], df.loc[['edf','gdf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
+        'log_gamma_g' : least_squares(residual, -np.ones(4), args=(df.loc[['gdf']]['stz_pre'], df.loc[['gdf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
+        'log_gamma_b' : least_squares(residual, -np.ones(4), args=(df.loc[['bdf']]['stz_pre'], df.loc[['bdf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
+        'log_gamma_e' : least_squares(residual, -np.ones(4), args=(df.loc[['edf']]['stz_pre'], df.loc[['edf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
     }
+
+    print('RDN')
+    print('---------')
+    for k, v in res_rdn.items():
+        print(f"{k:20}", '\t', 10**v.x)
+
+    print('')
+    print('Power law')
+    print('---------')
+    for k, v in res_power.items():
+        print(f"{k:20}", '\t', 10**v.x)
     return (
+        model_gamma_log_mean,
+        model_gamma_log_median,
         model_gamma_mean,
         model_gamma_median,
         model_gamma_q,
         res_power,
         res_rdn,
     )
+
+
+@app.cell
+def _(df):
+    set(df.index.get_level_values('set'))
+    return
+
+
+@app.cell
+def _(
+    df,
+    model_gamma_log_mean,
+    model_gamma_log_median,
+    np,
+    plt,
+    res_power,
+    res_rdn,
+):
+    _fig, _axs = plt.subplots(1,3, sharey=True)
+
+    _X = df.loc[['edf', 'gdf']]['pre']
+    _Y = df.loc[['edf', 'gdf']]['log_gamma']
+
+    _x = np.linspace(_X.min(), _X.max(), 100)
+    _pred_rdn = model_gamma_log_median(_x, res_rdn[f'log_gamma'].x)
+    _pred_power = model_gamma_log_mean(_x, res_power[f'log_gamma'].x)
+
+    _ax = _axs[0]
+    _ax.scatter(_X, _Y)
+    _ax.plot(_x, _pred_rdn)
+    _ax.plot(_x, _pred_power)
+
+    _ax.set_xscale('log')
+    # _ax.set_title(f"{10**res_rdn[f'log_gamma_{dset}'].x[2]:.2f}")
+    # _ax.plot(_dff[''])
+
+    plt.show()
+    return
+
+
+@app.cell
+def _(np, plt):
+    xx = np.linspace(-1,1,100)
+    plt.scatter(xx+5,xx)
+    plt.xscale('log')
+    plt.show()
+    return
+
+
+@app.cell
+def _(res_rdn):
+    res_rdn['gamma']
+    return
 
 
 @app.cell
@@ -236,7 +317,7 @@ def _(df, np, pd):
 
     cbins, _bins = pd.qcut(df['pre'], q=10, retbins=True)
     bins = np.convolve(_bins, 0.5*np.ones(2), mode='valid')
-    return bins, cbins, coverage, coverage_iq
+    return bins, cbins, coverage
 
 
 @app.cell
@@ -359,83 +440,6 @@ def _(
 @app.cell
 def _(muk, mun, np, pi, rho, sbar, sigmak, sigman):
     (np.exp(muk - mun + (sigmak**2 + sigman**2 - 2 * rho * sigmak * sigman)/2) * 100 / pi)**sbar
-    return
-
-
-@app.cell
-def _(
-    bins,
-    cbins,
-    coverage,
-    df,
-    model_gamma_median,
-    model_gamma_q,
-    np,
-    plt,
-    res_rdn,
-):
-    def _plotter(df, key):
-
-        y = df[key].groupby(cbins).agg(
-            q1 = lambda x: x.quantile(0.25),
-            med = lambda x: x.quantile(0.5),
-            q3 = lambda x: x.quantile(0.75),
-            mean = 'mean',
-            std = 'std',
-        )
-
-        ye = df[key].groupby(cbins).agg(
-            med_l = coverage('median', 'low'),
-            med_h = coverage('median', 'high'),
-            iq_l = coverage('iq', 'low'),
-            iq_h = coverage('iq', 'high'),
-            mean = 'sem',
-        )
-
-        fig, axs = plt.subplots(2,3, figsize=(12,6))
-        xx = np.linspace(0.14, 11, 100)
-
-        ax = axs[0,0]
-        ax.scatter(df['pre'], df[key], s=10, alpha=0.1, c='black', lw=0)
-        ax.plot(bins, y['med'], color='black', lw=3)
-        ax.plot(bins, y['q1'], color='black', lw=1, linestyle=(0,(8,3)))
-        ax.plot(bins, y['q3'], color='black', lw=1, linestyle=(0,(8,3)))
-
-        ax.plot(xx, model_gamma_median(xx, res_rdn['gamma'].x), color='tab:blue', lw=3, zorder=0)
-        ax.fill_between(
-            xx, 
-            model_gamma_q(xx, res_rdn[key].x, -0.75),
-            model_gamma_q(xx, res_rdn[key].x, 0.75),
-            color='tab:blue', lw=3, alpha=0.2,
-        )
-
-        ax = axs[0,1]
-        ax.errorbar(bins, y['med'], yerr=ye[['med_l', 'med_h']].T, c='black')
-        ax.plot(xx, model_gamma_median(xx, res_rdn[key].x), color='tab:blue', lw=3, zorder=0)
-
-        ax = axs[0,2]
-        ax.errorbar(bins, y['q3'] - y['q1'], yerr=ye[['med_l', 'med_h']].T, c='black')
-        ax.plot(xx, model_gamma_q(xx, res_rdn[key].x, 0.75) - model_gamma_q(xx, res_rdn[key].x, -0.75), color='tab:blue', lw=3, zorder=0)
-
-
-        for ax in axs.flatten():
-            # ax.set_xlim(0.1,12)
-            # ax.set_ylim(0.3, 5)
-            ax.set_xscale('log')
-            # ax.set_yscale('log')
-
-        return axs
-
-
-    _plotter(df, 'delta')
-    # axs = plotter(df, 'delta')
-    plt.show()
-    return
-
-
-@app.cell
-def _(res_rdn):
-    10**res_rdn['gamma'].x
     return
 
 
@@ -604,68 +608,6 @@ def _():
     # _fig.subplots_adjust(hspace=0.5, wspace=0.5)
 
     # plt.show()
-    return
-
-
-@app.cell
-def _(ci_iq, df):
-
-
-    _df = df.sort_values('pre').iloc[:38, :]
-    _df.quantile(0.75) - _df.quantile(0.25)
-    print(ci_iq(_df))
-    return
-
-
-@app.cell
-def _(Y, coverage_iq, coverage_median, pd, plt):
-    XX = XX[_m]
-    YY = YY[_m]
-    cbins_1, _bins = pd.qcut(XX, q=10, retbins=True)
-    _yy = YY.groupby(cbins_1).agg(
-        median="median",
-        q1=lambda x: x.quantile(0.25),
-        q3=lambda x: x.quantile(0.75),
-        n=lambda x: len(x),
-    )
-    cyy = Y.groupby(cbins_1).agg(
-        median=lambda x: coverage_median(x),
-        iq=lambda x: coverage_iq(x),
-        mean="sem",
-    )
-    _bins = (_bins[:-1] + _bins[1:]) / 2
-    _fig, _axs = plt.subplots(1, 2)
-    _ax = _axs[0]
-    _ax.plot(_bins, _yy["median"], lw=3, c="black")
-    _ax.plot(_bins, _yy["q1"], c="black", linestyle=(0, (8, 2)))
-    _ax.plot(_bins, _yy["q3"], c="black", linestyle=(0, (8, 2)))
-    _ax.scatter(XX, YY, s=1, alpha=0.1, c="black")
-    _ax = _axs[1]
-    _ax.errorbar(_bins, _yy["q3"] - _yy["q1"], yerr=cyy["iq"])
-
-    plt.show()
-    return XX, YY, cbins_1
-
-
-@app.cell
-def _(YY, cbins_1):
-    _yy = YY.groupby(cbins_1).agg(
-        median="median",
-        q1=lambda x: x.quantile(0.25),
-        q3=lambda x: x.quantile(0.75),
-        n=lambda x: len(x),
-    )
-    return
-
-
-@app.cell
-def _(XX, YY, plt):
-    plt.scatter(XX.iloc[:38], YY.iloc[:38])
-    return
-
-
-@app.cell
-def _():
     return
 
 
