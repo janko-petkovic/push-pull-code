@@ -7,34 +7,38 @@ app = marimo.App(width="full")
 @app.cell
 def _():
     import marimo as mo
-
-    return (mo,)
-
-
-@app.cell
-def _():
+    from pathlib import Path
     import numpy as np
     import pandas as pd
 
     import matplotlib.pyplot as plt
 
-    plt.style.use("default")
-    plt.rcParams["font.family"] = "open sans"
-
     from scipy.optimize import least_squares
 
     from rdn.validation import Simulation
     from rdn.defaults import pardict_from_result
-    from rdn.fitting.models import LocalGaussModelTilde
+    # from rdn.fitting.models import LocalGaussModelTilde
+    from rdn.rebuttal import scipymodels
 
     return (
-        LocalGaussModelTilde,
+        Path,
         least_squares,
+        mo,
         np,
         pardict_from_result,
         pd,
         plt,
+        scipymodels,
     )
+
+
+@app.cell
+def _(Path, plt):
+    plt.style.use("default")
+    plt.rcParams["font.family"] = "open sans"
+
+    ROOT = Path(__file__).parent
+    return (ROOT,)
 
 
 @app.cell(hide_code=True)
@@ -46,12 +50,14 @@ def _(mo):
 
 
 @app.cell
-def _(LocalGaussModelTilde, pardict_from_result):
-    model = LocalGaussModelTilde()
+def _(LocalGaussModelTilde, ROOT, pardict_from_result):
+    _model = LocalGaussModelTilde()
 
     model_p_dict = pardict_from_result(
-        "output/multi_fitting/Multi_LocalGaussModelTilde/"
-        "NLLAdast/1_3_5_7_Spine_data_fides_1200.hdf5",
+        ROOT / (
+            "output/multi_fitting/Multi_LocalGaussModelTilde/"
+            "NLLAdast/1_3_5_7_Spine_data_fides_1200.hdf5"
+        ),
         Chi=1,
         dendrite_length=1000,
         N_mean=5000,
@@ -67,7 +73,7 @@ def _(LocalGaussModelTilde, pardict_from_result):
     # Usual accounting for shorter dendrite
     # As discussed
     model_p_dict["tau_K"] = model_p_dict["tau_K"] * 2
-    return (model_p_dict,)
+    return
 
 
 @app.cell(hide_code=True)
@@ -92,11 +98,11 @@ def _(np, pd):
         log_pre = np.log(df['pre'])
         dflist[i]['stz_pre'] = np.exp((log_pre - log_pre.mean())/log_pre.std())
 
-    
+
     index_list = []
     for _dff, name in zip(dflist, ('bdf', 'edf', 'gdf')):
         index_list += [(name, i) for i in _dff.index]
-    
+
     indexes = pd.MultiIndex.from_tuples(index_list, names=['set', 'idx'])
 
     def standardize_pre(df):
@@ -112,7 +118,6 @@ def _(np, pd):
     ).reset_index(drop=True).set_index(indexes)
 
     df.loc[['bdf', 'gdf'], 'gamma']
-
     return (df,)
 
 
@@ -131,100 +136,37 @@ def _(mo):
 
 
 @app.cell
-def _(model_p_dict, np):
-    mpd = model_p_dict
+def _(df, least_squares, scipymodels):
+    model_dict = {str(m) : m for m in [
+        scipymodels.PowerLaw(),
+        scipymodels.PowerLawScale(),
+        scipymodels.PushPullMedian(),
+    ]}
 
-    muk = mpd['mu_log_K_N'][0]
-    sigmak = np.sqrt(mpd['cov_log_K_N'][0,0])
-    mun = mpd['mu_log_K_N'][1]
-    sigman = np.sqrt(mpd['cov_log_K_N'][1,1])
-    deltak = mpd['Ks']
-    deltan = mpd['Ns']
-    pi = mpd['Pi']
+    X =  df.loc[['edf','gdf']]['stz_pre']
+    Y = df.loc[['edf','gdf']]['log_gamma']
+    res = {}
 
-
-    rho = mpd['cov_log_K_N'][0,1] / sigmak / sigman
-    sbar = (rho * sigmak - sigman) / (sigmak**2 + sigman**2 - 2 * rho * sigmak * sigman)
-
-    e50 = np.exp(-mun * (1 - sbar) - muk * sbar)
-    return deltak, deltan, e50, muk, mun, pi, rho, sbar, sigmak, sigman
-
-
-@app.cell
-def _(df, least_squares, np):
-    def model_gamma_median(x,p):
-        p = 10**p
-        # p = pp
-        deltak = p[0]
-        deltan = p[1]
-        sbar = p[2]
-        e50 = p[3]
-
-        return (
-            (1 + deltak * e50 * x**(sbar - 1))
-            / (1 + deltan * e50 * x**(sbar))
+    for _modelname, _model in model_dict.items():
+        res[_modelname] = least_squares(
+            _model.residual,
+            x0=_model.gen_p0(),
+            args=(X,Y)
         )
 
-    def model_gamma_log_median(x,p):
-        return np.log(model_gamma_median(x,p))
+    for k,v in res.items():
+        print(k, v.x)
+    # print('RDN')
+    # print('---------')
+    # for k, v in res_rdn.items():
+    #     print(f"{k:20}", '\t', 10**v.x)
 
-    def model_gamma_q(x,p,f):
-        p = 10**p
-        # p = pp
-        deltak = p[0]
-        deltan = p[1]
-        sbar = p[2]
-        e50 = p[3] * np.exp(f)
-
-        return (
-            (1 + deltak * e50 * x**(sbar - 1))
-            / (1 + deltan * e50 * x**(sbar))
-        )
-
-    def model_gamma_mean(x, p):
-        p = 10**p
-        return 1 + p[0] * x ** (-p[1])
-
-    def model_gamma_log_mean(x, p):
-        return np.log(model_gamma_mean(x,p))
-
-
-    def residual(p, X, Y, model):
-        return Y - model(X, p)
-
-    res_rdn = {
-        'log_gamma' : least_squares(residual, -np.ones(4), args=(df.loc[['edf','gdf']]['stz_pre'], df.loc[['edf','gdf']]['log_gamma'], model_gamma_log_median), loss='linear'),
-        'log_gamma_gdf' : least_squares(residual, -np.ones(4), args=(df.loc[['gdf']]['stz_pre'], df.loc[['gdf']]['log_gamma'], model_gamma_log_median), loss='linear'),
-        'log_gamma_bdf' : least_squares(residual, -np.ones(4), args=(df.loc[['bdf']]['stz_pre'], df.loc[['bdf']]['log_gamma'], model_gamma_log_median), loss='linear'),
-        'log_gamma_edf' : least_squares(residual, -np.ones(4), args=(df.loc[['edf']]['stz_pre'], df.loc[['edf']]['log_gamma'], model_gamma_log_median), loss='linear'),
-    }
-
-    res_power = {
-        'log_gamma' : least_squares(residual, -np.ones(4), args=(df.loc[['edf','gdf']]['stz_pre'], df.loc[['edf','gdf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
-        'log_gamma_g' : least_squares(residual, -np.ones(4), args=(df.loc[['gdf']]['stz_pre'], df.loc[['gdf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
-        'log_gamma_b' : least_squares(residual, -np.ones(4), args=(df.loc[['bdf']]['stz_pre'], df.loc[['bdf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
-        'log_gamma_e' : least_squares(residual, -np.ones(4), args=(df.loc[['edf']]['stz_pre'], df.loc[['edf']]['log_gamma'], model_gamma_log_mean), loss='linear'),
-    }
-
-    print('RDN')
-    print('---------')
-    for k, v in res_rdn.items():
-        print(f"{k:20}", '\t', 10**v.x)
-
-    print('')
-    print('Power law')
-    print('---------')
-    for k, v in res_power.items():
-        print(f"{k:20}", '\t', 10**v.x)
-    return (
-        model_gamma_log_mean,
-        model_gamma_log_median,
-        model_gamma_mean,
-        model_gamma_median,
-        model_gamma_q,
-        res_power,
-        res_rdn,
-    )
+    # print('')
+    # print('Power law')
+    # print('---------')
+    # for k, v in res_power.items():
+    #     print(f"{k:20}", '\t', 10**v.x)
+    return
 
 
 @app.cell
@@ -243,7 +185,7 @@ def _(
     res_power,
     res_rdn,
 ):
-    _fig, _axs = plt.subplots(1,3, sharey=True)
+    dd_fig, _axs = plt.subplots(1,3, sharey=True)
 
     _X = df.loc[['edf', 'gdf']]['pre']
     _Y = df.loc[['edf', 'gdf']]['log_gamma']
@@ -262,21 +204,6 @@ def _(
     # _ax.plot(_dff[''])
 
     plt.show()
-    return
-
-
-@app.cell
-def _(np, plt):
-    xx = np.linspace(-1,1,100)
-    plt.scatter(xx+5,xx)
-    plt.xscale('log')
-    plt.show()
-    return
-
-
-@app.cell
-def _(res_rdn):
-    res_rdn['gamma']
     return
 
 
@@ -434,180 +361,6 @@ def _(
 
     _plotter(df, 'gamma')
     plt.show()
-    return
-
-
-@app.cell
-def _(muk, mun, np, pi, rho, sbar, sigmak, sigman):
-    (np.exp(muk - mun + (sigmak**2 + sigman**2 - 2 * rho * sigmak * sigman)/2) * 100 / pi)**sbar
-    return
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    Plotting parameters
-    """)
-    return
-
-
-@app.cell
-def _():
-    # cbins, _bins = pd.qcut(X, q=10, retbins=True)
-    # _bins = (_bins[1:] + _bins[:-1]) / 2
-
-    # def coverage_median(x):
-    #     return (
-    #         x[x.rank(method="first") == 25].item()
-    #         - x[x.rank(method="first") == 14].item()
-    #     ) / 2
-
-    # def coverage_iq(x):
-    #     x = 
-    #     ci1 = 
-    #     eq1 = (
-    #         x[x.rank(method="first") == 15].item()
-    #         - x[x.rank(method="first") == 5].item()
-    #     ) / 2
-
-    #     eq3 = (
-    #         x[x.rank(method="first") == 34].item()
-    #         - x[x.rank(method="first") == 24].item()
-    #     ) / 2
-
-    #     eiq = np.sqrt(eq1**2 + eq3**2)
-    #     return eiq
-
-    # y = Y.groupby(cbins).agg(
-    #     median="median",
-    #     q1=lambda x: x.quantile(0.25),
-    #     q3=lambda x: x.quantile(0.75),
-    #     mean="mean",
-    #     n=lambda x: len(x),
-    # )
-    # coverage = Y.groupby(cbins).agg(
-    #     median=lambda x: coverage_median(x),
-    #     iq=lambda x: coverage_iq(x),
-    #     mean="sem",
-    # )
-    # med, q1, q3, mean, n = [y.iloc[:, i] for i in range(len(y.T))]
-    # xx = np.linspace(0.03, 1, 100)
-    # p0 = np.ones(4)
-    # res_rdn = least_squares(
-    #     residual, x0=p0, args=(X, Y, rdn_model), loss="soft_l1"
-    # )
-    # res_power = least_squares(
-    #     residual, x0=p0, args=(X, Y, power_model), loss="linear"
-    # )
-    # med_res = np.array(res_rdn.x).copy()
-    # lq_res = med_res.copy()
-    # hq_res = med_res.copy()
-    # lq_res[0] = lq_res[0] / 1.6
-    # lq_res[2] = lq_res[2] / 1.6
-    # hq_res[0] = hq_res[0] * 1.6
-    # hq_res[2] = hq_res[2] * 1.6
-    # _fig, _axs = plt.subplots(2, 3, figsize=(12, 6), dpi=200)
-    # _ax = _axs[0, 0]
-    # _ax.scatter(X, Y, s=1, alpha=0.1, c="black")
-    # _ax.plot(_bins, med, c="black", zorder=10, lw=3, label="Data median")
-    # _ax.plot(_bins, q1, c="black", linestyle=(0, (8, 2)), label="Data IQ")
-    # _ax.plot(_bins, q3, c="black", linestyle=(0, (8, 2)))
-    # _ax.plot(
-    #     xx,
-    #     rdn_model(xx, res_rdn.x),
-    #     lw=4,
-    #     c="tab:blue",
-    #     zorder=0,
-    #     label="Median model",
-    # )
-    # _ax.fill_between(
-    #     xx,
-    #     rdn_model(xx, lq_res),
-    #     rdn_model(xx, hq_res),
-    #     alpha=0.2,
-    #     label="IQ model",
-    # )
-    # _ax.legend(frameon=False, fontsize=9)
-    # _ax.set_ylim(0.5, 20)
-    # _ax.set_title("Plasticity response ratio")
-    # _ax = _axs[0, 1]
-    # _ax.errorbar(
-    #     _bins,
-    #     med,
-    #     yerr=coverage["median"].to_numpy(),
-    #     fmt="o",
-    #     c="black",
-    #     label="Data median",
-    # )
-    # _ax.plot(xx, rdn_model(xx, med_res), lw=4, zorder=0, label="Median model")
-    # _ax.set_title("Median of the ratio")
-    # _ax.legend(frameon=False, fontsize=9)
-    # _ax = _axs[0, 2]
-    # _ax.errorbar(
-    #     _bins,
-    #     q3 - q1,
-    #     yerr=coverage["iq"].to_numpy(),
-    #     fmt="o",
-    #     c="black",
-    #     label="Data IQ",
-    # )
-    # _ax.plot(
-    #     xx,
-    #     rdn_model(xx, lq_res) - rdn_model(xx, hq_res),
-    #     lw=4,
-    #     zorder=0,
-    #     label="IQ model",
-    # )
-    # _ax.legend(frameon=False, fontsize=9)
-    # _ax.set_title("IQ range of the ratio")
-    # _ax = _axs[1, 0]
-    # _ax.scatter(X, Y, s=1, alpha=0.1, c="black")
-    # _ax.plot(_bins, mean, c="black", zorder=10, lw=3, label="Data mean")
-    # _ax.plot(
-    #     _bins,
-    #     mean - coverage["mean"] * 3,
-    #     c="black",
-    #     linestyle=(0, (8, 2)),
-    #     label="Data SEM",
-    # )
-    # _ax.plot(
-    #     _bins, mean + coverage["mean"] * 3, c="black", linestyle=(0, (8, 2))
-    # )
-    # _ax.plot(
-    #     xx,
-    #     power_model(xx, res_power.x),
-    #     lw=4,
-    #     c="gray",
-    #     zorder=1,
-    #     label="Mean model",
-    # )
-    # _ax.set_ylim(0.5, 20)
-    # _ax.legend(frameon=False, fontsize=9)
-    # _ax = _axs[1, 1]
-    # _ax.errorbar(
-    #     _bins,
-    #     mean,
-    #     yerr=coverage["mean"].to_numpy(),
-    #     fmt="o",
-    #     c="black",
-    #     label="Data mean",
-    # )
-    # _ax.plot(
-    #     xx,
-    #     power_model(xx, res_power.x),
-    #     lw=4,
-    #     c="gray",
-    #     zorder=1,
-    #     label="Mean model",
-    # )
-    # _ax.legend(frameon=False, fontsize=9)
-    # for _ax in _axs.flatten():
-    #     _ax.set_yscale("log")
-    #     _ax.set_xlabel("Normalized basal size")
-    #     _ax.set_ylabel("Post-basal ratio")
-    # _fig.subplots_adjust(hspace=0.5, wspace=0.5)
-
-    # plt.show()
     return
 
 
