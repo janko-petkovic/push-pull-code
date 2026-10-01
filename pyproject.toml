@@ -23,6 +23,8 @@ dependencies = [
     "palettable",
     "scikit-image",
     "marimo>=0.23.16",
+    "jax>=0.10.2",
+    "pydantic>=2.13.5",
 ]
 
 [build-system]
@@ -31,7 +33,18 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.16.1",
+  {include-group = "lint"},
+  {include-group = "test"},
+]
+dev_gpu = [
+  {include-group = "dev"},
+  {include-group = "gpu"},
+]
+
+lint = [ "ruff>=0.16.1", ]
+test = [ "pytest", ]
+gpu = [
+    "jax[cuda13]>=0.10.2",
 ]
 
 [project.urls]

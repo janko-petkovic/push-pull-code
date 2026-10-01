@@ -58,3 +58,24 @@ class PushPullMedian(ScipyModel):
 
     def __str__(self):
         return 'PPM'
+
+class PushPullIQ(ScipyModel):
+
+    def forward(x,p,f):
+        p = 10**p
+        # p = pp
+        deltak = p[0]
+        deltan = p[1]
+        sbar = p[2]
+        e50 = p[3] * np.exp(f)
+
+        return (
+            (1 + deltak * e50 * x**(sbar - 1))
+            / (1 + deltan * e50 * x**(sbar))
+        )
+
+    def gen_p0(self):
+        return ones(4)
+
+    def __str__(self):
+        return 'PPQ'
