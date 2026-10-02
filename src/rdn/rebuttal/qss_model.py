@@ -1,19 +1,19 @@
 import jax
 import jax.numpy as jnp
 from rdn.rebuttal.parameters import Experiment
-from rdn.rebuttal.experiment import _compute_observation_specs, Dataset, Result
+from rdn.rebuttal.observationspecs import compute_observation_specs
 import rdn.rebuttal.differential_model as diffm
 from rdn.rebuttal.differential_model import bell_kernel
 
-def run_session_qss(parameters) -> tuple:
+def run_session_qss(key, parameters) -> tuple:
     '''remember that spines are hardcoded to be spaced by 1um from each
     other.
+    each yy needs to have shape (n_sessions, n_times, n_spines)
     '''
     
-    OMEGA = 10
+    OMEGA = 200
 
     # define the local parameters
-    key = jax.random.key(parameters.integration.seed)
     n_spines = parameters.dendrite.n_spines
     unc_locations = jnp.array(
         parameters.experiment.uncaging_protocol.spine_locations
@@ -24,18 +24,19 @@ def run_session_qss(parameters) -> tuple:
 
     sigma_K = parameters.species.kinases.sigma
     sigma_N = parameters.species.phosphatases.sigma
-    tau_K = parameters.species.kinases.tau * obs_time_factor
-    tau_N = parameters.species.phosphatases.tau * obs_time_factor
+    tau_K = parameters.species.kinases.tau / obs_time_factor
+    tau_N = parameters.species.phosphatases.tau / obs_time_factor
     Ks = parameters.species.kinases.delta_stim
     Ns = parameters.species.phosphatases.delta_stim
 
     # Generate initial conditions
     ic_key, unc_key = jax.random.split(key)
+
     y0, dendrite_indexes, spine_indexes = (
         diffm.setup_dendrite_initial_conditions(ic_key, parameters)
     )
-
-    ospecs = _compute_observation_specs(
+    
+    ospecs = compute_observation_specs(
         parameters, dendrite_indexes, spine_indexes
     )
 
@@ -50,13 +51,13 @@ def run_session_qss(parameters) -> tuple:
         jnp.arange(n_spines),
         unc_locations,
         sigma_K,
-    ).squeeze() * Ks
+    ).sum(axis=0) * Ks*100
 
     Ns0_x = v_bell_kernel(
         jnp.arange(n_spines),
         unc_locations,
         sigma_N,
-    ).squeeze() * Ns
+    ).sum(axis=0) * Ns*100
 
     K_tx = (
         Ks0_x[None,:] * jnp.exp(-ospecs.obs_times/tau_K)[:, None] 
@@ -64,7 +65,7 @@ def run_session_qss(parameters) -> tuple:
     )
 
     N_tx = (
-        Ns0_x[None,:] * jnp.exp(-ospecs.obs_times/tau_K)[:, None] 
+        Ns0_x[None,:] * jnp.exp(-ospecs.obs_times/tau_N)[:, None] 
         + N_basal_x[None, :]
     )
 
@@ -72,6 +73,12 @@ def run_session_qss(parameters) -> tuple:
     norm_p_tx = (
         alpha_tx / (OMEGA + alpha_tx.sum(axis=1)[:, None])
     )
+
+    # Now we have to reinsert the total protein content compatibly with
+    # the differential simulation. To do that, we multiply norm_p_tx such that
+    # the final size is back to baseline
+    factor = y0['ps']/ norm_p_tx[-1] 
+    p_tx = norm_p_tx * factor
     
     
     # BUILDING THE RETURN OBJECT
@@ -84,23 +91,13 @@ def run_session_qss(parameters) -> tuple:
 
     obs_yt = {k: None for k in y0.keys()}
 
-    obs_yt['ud'] = None
-    obs_yt['us'] = None
-    obs_yt['ks'] = K_tx[ospecs.obs_spine_arange]
-    obs_yt['ns'] = N_tx[ospecs.obs_spine_arange]
-    obs_yt['ps'] = norm_p_tx[ospecs.obs_spine_arange]
+    obs_yt['ks'] = K_tx[:, ospecs.obs_spine_arange]
+    obs_yt['ns'] = N_tx[:, ospecs.obs_spine_arange]
+    obs_yt['ps'] = p_tx[:, ospecs.obs_spine_arange]
+    obs_yt['ud'] = -jnp.ones_like(obs_yt['ps'])
+    obs_yt['us'] = -jnp.ones_like(obs_yt['ps'])
 
-    # THIS SHOULD NOT BE HERE, I AM INJECTING THIS FUNCTION IN THE WRONG PLACE
-    # Currently it is in run_experiment, but should return in _run_experiment
-    # for k, v in obs_y0.items():
-    #     obs_y0[k] = jnp.expand_dims(v, axis=1)
-    dataset = Dataset(obs_y0, obs_yt)
+    # breakpoint()
+    return (ospecs, obs_y0, obs_yt)
 
-    return Result(
-        key,
-        ospecs.obs_times,
-        ospecs.obs_stim_locations,
-        ospecs.obs_spine_locations,
-        ospecs.obs_dendrite_locations,
-        dataset,
-    )
+

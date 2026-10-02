@@ -30,31 +30,11 @@ import jax.numpy as jnp
 import matplotlib.pyplot as plt
 
 import rdn.rebuttal.differential_model as diffm
-from rdn.rebuttal.parameters import Parameters, Experiment
+from rdn.rebuttal.parameters import Parameters
+from rdn.rebuttal.observationspecs import compute_observation_specs 
+from rdn.rebuttal.qss_model import run_session_qss
 
 
-
-class ObservationSpecs(NamedTuple):
-    """
-    Attributes
-    ----------
-    obs_spine_arange: jax.Array
-    obs_spine_indexes: jax.Array
-    obs_spine_locations: jax.Array
-    obs_dendrite_indexes: jax.Array
-    obs_dendrite_locations: jax.Array
-    obs_timesteps: jax.Array
-    obs_times: jax.Array
-    """
-
-    obs_stim_locations: jax.Array
-    obs_spine_arange: jax.Array
-    obs_spine_indexes: jax.Array
-    obs_spine_locations: jax.Array
-    obs_dendrite_indexes: jax.Array
-    obs_dendrite_locations: jax.Array
-    obs_timesteps: jax.Array
-    obs_times: jax.Array
 
 
 class Dataset:
@@ -176,48 +156,6 @@ class Result(NamedTuple):
             pickle.dump(experiment, f)
 
 
-def _compute_observation_specs(parameters, dendrite_indexes, spine_indexes):
-    """This function does a bit too much stuff to be a dangling function,
-    better include it in the parameter class when we implement it"""
-
-    dx = parameters.integration.dx
-    dt = parameters.integration.dt
-    obs_time_range = parameters.experiment.observation.time_range
-    obs_time_factor = Experiment.time_unit_to_factor(
-        parameters.experiment.time_unit
-    )
-    obs_times = jnp.arange(*obs_time_range)
-
-    cpm = int(1 / dx)
-
-    obs_timesteps = (obs_times * obs_time_factor / dt).astype(int)
-
-    stim_indexes = jnp.array(
-        parameters.experiment.uncaging_protocol.spine_locations
-    )
-
-    obs_spine_limits = parameters.experiment.observation.spine_limits
-    obs_spine_arange = jnp.arange(obs_spine_limits[0], obs_spine_limits[1])
-
-    obs_spine_indexes = spine_indexes[obs_spine_arange]
-    obs_dendrite_indexes = dendrite_indexes[
-        obs_spine_indexes[0] - cpm : obs_spine_indexes[-1] + cpm + 1
-    ]
-
-    obs_stim_locations = stim_indexes + 1
-    obs_spine_locations = obs_spine_indexes * dx
-    obs_dendrite_locations = obs_dendrite_indexes * dx
-
-    return ObservationSpecs(
-        obs_stim_locations,
-        obs_spine_arange,
-        obs_spine_indexes,
-        obs_spine_locations,
-        obs_dendrite_indexes,
-        obs_dendrite_locations,
-        obs_timesteps,
-        obs_times,
-    )
 
 
 def _run_session(key, parameters) -> tuple:
@@ -234,14 +172,17 @@ def _run_session(key, parameters) -> tuple:
 
     # Setting up
     ic_key, unc_key = jax.random.split(key)
+
     y0, dendrite_indexes, spine_indexes = (
         diffm.setup_dendrite_initial_conditions(ic_key, parameters)
     )
+
     unc_mask = diffm.setup_rdn_uncaging_mask(unc_key, parameters, y0)
+
     stepper = diffm.setup_rnd_integrator(
         parameters, spine_indexes, y0, unc_mask,
     )
-    ospecs = _compute_observation_specs(
+    ospecs = compute_observation_specs(
         parameters, dendrite_indexes, spine_indexes
     )
 
@@ -284,35 +225,55 @@ def _run_experiment(parameters) -> Result:
     """
     Actually computes the experimental run given the specs in the parameter
     file and the random key.
+    Model type: 'differential' or 'qss'
     """
 
     n_sessions = parameters.experiment.n_sessions
     key = jax.random.key(parameters.integration.seed)
-    key, *subkeys = jax.random.split(key, n_sessions + 2)
+    subkeys = jax.random.split(key, n_sessions + 1)
 
-    # Run one dry session to compile
     from time import time
+    match parameters.integration.model_type:
+        case 'qss':
+            # Workaround not to implement __getitem__ method in
+            # ObservationSpecs
+            ospecs, _, _ = run_session_qss(subkeys[0], parameters)
+            vf = jax.vmap(run_session_qss, in_axes=(0, None))
+            timea = time()
+            _, obs_y0, obs_yt = vf(subkeys[1:], parameters)
+            timeb = time()
+            session_runtime = timeb - timea
+            print(f"session runtime (with compilation): {session_runtime:2f} s")
+            
+        case 'differential':
+            # Run one dry session to compile
+            print("Executing dry run...", end="")
+            timea = time()
+            ospecs, obs_y0, _ = _run_session(subkeys[0], parameters)
+            obs_y0["ks"].block_until_ready()
+            timeb = time()
+            session_runtime = timeb - timea
+            print(f"session runtime (with compilation): {session_runtime:2f} s")
 
-    print("Executing dry run...", end="")
-    timea = time()
-    ospecs, obs_y0, _ = _run_session(subkeys[0], parameters)
-    obs_y0["ks"].block_until_ready()
-    timeb = time()
-    session_runtime = timeb - timea
-    print(f"session runtime (with compilation): {session_runtime:2f} s")
+            v_run_session = jax.vmap(_run_session, (0, None))
+            print("Running full experiment...", end="")
+            timea = time()
+            _, obs_y0, obs_yt = v_run_session(jnp.array(subkeys[1:]), parameters)
+            obs_y0["ks"].block_until_ready()
+            timeb = time()
+            experiment_runtime = timeb - timea
+            print(f"experiment runtime (with compilation): {experiment_runtime:2f} s")
 
-    v_run_session = jax.vmap(_run_session, (0, None))
-    print("Running full experiment...", end="")
-    timea = time()
-    _, obs_y0, obs_yt = v_run_session(jnp.array(subkeys[1:]), parameters)
-    obs_y0["ks"].block_until_ready()
-    timeb = time()
-    experiment_runtime = timeb - timea
-    print(f"experiment runtime (with compilation): {experiment_runtime:2f} s")
+        case _:
+            raise ValueError(
+                'Wrong model type: choices are "qss" or '
+                '"differential_model"'
+            )
 
     # Insert one dimension for compatibility with yt
     for k, v in obs_y0.items():
         obs_y0[k] = jnp.expand_dims(v, axis=1)
+
     dataset = Dataset(obs_y0, obs_yt)
 
     return Result(
@@ -328,35 +289,22 @@ def _run_experiment(parameters) -> Result:
 def run_experiment(
     path_to_parameters: Path,
     path_to_save_folder: Path, 
-    model_type: str = 'differential',
+    force_new_simulation: bool = False
 ) -> Result:
     """For the love of god, the paths are relative to the main function call,
     be certain of that
-
-    model_type: differential or qss
-
     """
 
     parameters = Parameters.load(path_to_parameters)
+    model_type = parameters.integration.model_type
 
-    path_to_file, experiment = Result.safe_load(
+    path_to_file, result = Result.safe_load(
         parameters, path_to_save_folder
     )
 
-    if experiment is None:
-        print("Simulating new experiment.")
-        match model_type:
-            case 'differential':
-                result = _run_experiment(parameters)
-            case 'qss':
-                from rdn.rebuttal.qss_model import run_session_qss
-                result = run_session_qss(parameters)
-            case _:
-                raise ValueError(
-                    'Wrong model type. Possibilities are "differential" '
-                    'and "qss"'
-                )
-
-        Result.save(experiment, path_to_file)
+    if result is None or force_new_simulation:
+        print(f"Simulating new experiment. Model: {model_type}")
+        result = _run_experiment(parameters)
+        Result.save(result, path_to_file)
 
     return result

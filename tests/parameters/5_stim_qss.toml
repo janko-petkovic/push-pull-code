@@ -44,12 +44,12 @@ log_var = 0.35
 log_cross_cov = 0.2
 
 [dendrite]
-# For now we consider one spine every two microns
+# For now we consider one spine every micron
 n_spines = 100
 alpha = 1
 
 [integration]
-model_type='differential'
+model_type = 'qss'
 seed = 2026
 dt = 1 # seconds
 dx = 0.5 # um
@@ -68,4 +68,4 @@ active = true
 with_failure = false
 frequency = 0.5 # Hz
 duration = 2
-spine_locations = [50] # array indexing
+spine_locations = [45, 48,50,53, 54] # array indexing

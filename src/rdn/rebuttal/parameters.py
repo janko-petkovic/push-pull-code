@@ -79,9 +79,21 @@ class Dendrite(BaseModel):
 
 
 class Integration(BaseModel):
+    model_type: str
     seed: int
     dt: float
     dx: float
+    @model_validator(mode="after")
+    def _check_validity_model_type(self):
+        match self.model_type:
+            case 'qss': pass
+            case 'differential': pass
+            case _: raise ValueError(
+                'Invalid model type. Available choices are "differential"'
+                'and "qss".'
+            )
+                
+        return self
 
 
 class Observation(BaseModel):

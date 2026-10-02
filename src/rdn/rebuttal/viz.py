@@ -37,6 +37,7 @@ def plot_snapshot(
 
     axs = fig.subplots(3,1,sharex=True)
 
+    # breakpoint()
     ax = axs[0]
     l,m,h = quick_mapper('ps')
     ax.plot(spine_X, m, '-o')
@@ -50,11 +51,11 @@ def plot_snapshot(
     ax.bar(spine_X+0.15, m, width=0.3, yerr=(m-l, h-m), ecolor='mediumvioletred', color='mediumvioletred')
     ax.set_ylim(y_lims['ksns'])
 
-    ax = axs[2]
-    l,m,h = quick_mapper('ud')
-    ax.plot(dendrite_X, m, '-', color='gray')
-    ax.fill_between(dendrite_X, l, h, alpha=0.2, color='gray')
-    ax.set_ylim(y_lims['ud'])
+    # ax = axs[2]
+    # l,m,h = quick_mapper('ud')
+    # ax.plot(dendrite_X, m, '-', color='gray')
+    # ax.fill_between(dendrite_X, l, h, alpha=0.2, color='gray')
+    # ax.set_ylim(y_lims['ud'])
 
     for ax in axs:
         for x in experiment.xs_stim:
