@@ -49,6 +49,7 @@ n_spines = 100
 alpha = 1
 
 [integration]
+model_type="qss"
 seed = 2027
 dt = 0.5 # seconds
 dx = 0.5 # um

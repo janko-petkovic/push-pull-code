@@ -17,13 +17,17 @@ def run_simulation():
     PATH_TO_PAR_FOLDER = Path(__file__).parent / "parameters/"
     PATH_TO_SAVE_FOLDER = Path(__file__).parent / "output/"
 
-    experiments = []
+    diff_experiments = []
+    qss_experiments = []
 
     for file in PATH_TO_PAR_FOLDER.iterdir():
-        print(file)
         path_to_parameters = PATH_TO_PAR_FOLDER / file
         experiment = run_experiment(path_to_parameters, PATH_TO_SAVE_FOLDER)
-        experiments.append(experiment)
+
+        if "qss" in file: 
+            qss_experiments.append(experiment)
+        else:
+            diff_experiments.append(experiment)
 
     t_idxs = (2,10,20,30,)
     x_view = [41,61]

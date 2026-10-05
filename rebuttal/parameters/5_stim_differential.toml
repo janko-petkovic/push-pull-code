@@ -49,12 +49,15 @@ n_spines = 100
 alpha = 1
 
 [integration]
+model_type = 'differential'
 seed = 2026
-dt = 1 # seconds
+dt = 1 # THIS IS ALWAYS GIVEN IN SECONDS
 dx = 0.5 # um
 
-[experiment] # the time unit applies to all time params
+[experiment]
 n_sessions = 40
+# the time unit applies to all time params in the experiment, but not to 
+# the other parameters, which are always given relative to seconds
 time_unit = "min" # "min" or "s" or "ms"
 
 [experiment.observation]

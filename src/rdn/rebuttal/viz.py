@@ -1,4 +1,5 @@
 import jax.numpy as jnp
+from typing import Iterable
 # import matplotlib.pyplot as plt
 
 
@@ -167,19 +168,40 @@ def plot_cool(
     ax.set_ylabel('Post-pre ratio')
     ax.set_xlabel(r'Position along dendrite $[\mu m]$')
 
+def plot_comparison(
+    fig,
+    experiments,
+    t_idxs: Iterable[int],
+    x_view: Iterable[int] = [0,100],
+    summary: str ="medianiq",
+    relative: bool =True,
+    y_lims = dict(ps=(0.9, 1.5),ksns=(0, 20),ud=(0.9, 1.1)),
+    keys = Iterable[str]
+    # **kwargs,
+):
+    '''n_experiments rows, t_idx cols'''
 
-# def _random_code():
-    # fig, axs = plt.subplots(2,1, sharex=True)
-    # colors = np.array(['tab:blue']*len(p0))
-    #
-    # axs[0].scatter(resp_p0s, resp_ratios, marker='x', c='tab:blue', alpha=1,
-    #                lw=1)
-    # axs[0].scatter(non_resp_p0s, non_resp_ratios, marker='x', c='gray',
-    #                alpha=1, lw=1)
-    #
-    # axs[0].axhline(1., linestyle=(0,(8,4)), lw=1, c='black')
-    #
-    # axs[1].bar(bins, rvals, width=0.03)
-    # axs[1].bar(bins, nrvals, width=0.03, bottom=rvals, color='gray',
-    #            alpha=0.5)
-    # plt.show()
+    def quick_mapper(key, experiment, t_idx):
+        mask = dendrite_mask if 'd' in key else spine_mask
+        return map(
+            lambda x: x[t_idx, mask], 
+            experiment.dataset.get_summary(key, relative=relative)
+        )
+
+    axs = fig.subplots(len(keys), len(t_idxs),sharex=True)
+
+    # breakpoint()
+    for row, key in zip(axs, keys):
+        for experiment in experiments:
+            _ = experiment.get_X_and_mask_from_view(x_view)
+            dendrite_mask, dendrite_X, spine_mask, spine_X = _
+
+            for ax, t_idx in zip(row, t_idxs):
+                l,m,h = quick_mapper(key, experiment, t_idx)
+                ax.plot(spine_X, m, '-')
+                ax.fill_between(spine_X, l, h, alpha=0.2)
+                ax.set_ylim(y_lims['ps'])
+
+                for x in experiment.xs_stim:
+                    ax.axvline(x)
+

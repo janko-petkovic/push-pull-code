@@ -49,12 +49,13 @@ n_spines = 100
 alpha = 1
 
 [integration]
-seed = 2026
-dt = 1 # seconds
+model_type="differential"
+seed = 2027
+dt = 0.5 # seconds
 dx = 0.5 # um
 
 [experiment] # the time unit applies to all time params
-n_sessions = 16
+n_sessions = 40
 time_unit = "min" # "min" or "s" or "ms"
 
 [experiment.observation]
@@ -64,8 +65,9 @@ time_range = [0,40] # usual array indexing [min, max)
 
 [experiment.uncaging_protocol]
 active = true 
-with_failure = false
+with_failure = true
 frequency = 0.5 # Hz
 duration = 2
-# spine_locations = [48,50,53] # array indexing
-spine_locations = [49,50,52] # array indexing
+spine_locations = [43, 45, 47, 49, 51, 53, 55] # array indexing
+# spine_locations = [47,48,49,50,51,52,53] # array indexing
+# spine_locations = [41, 44, 47, 50, 53, 56, 59] # array indexing

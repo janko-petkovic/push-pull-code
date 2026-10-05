@@ -44,17 +44,18 @@ log_var = 0.35
 log_cross_cov = 0.2
 
 [dendrite]
-# For now we consider one spine every micron
+# For now we consider one spine every two microns
 n_spines = 100
 alpha = 1
 
 [integration]
+model_type = 'differential'
 seed = 2026
 dt = 1 # seconds
 dx = 0.5 # um
 
 [experiment] # the time unit applies to all time params
-n_sessions = 40
+n_sessions = 16
 time_unit = "min" # "min" or "s" or "ms"
 
 [experiment.observation]
@@ -67,4 +68,5 @@ active = true
 with_failure = false
 frequency = 0.5 # Hz
 duration = 2
-spine_locations = [45, 48,50,53, 54] # array indexing
+# spine_locations = [48,50,53] # array indexing
+spine_locations = [49,50,52] # array indexing
