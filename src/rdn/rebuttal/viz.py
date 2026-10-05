@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 from typing import Iterable
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+from numpy import expand_dims
 
 
 def consistency_plot(experiment, ax):
@@ -175,7 +176,7 @@ def plot_comparison(
     x_view: Iterable[int] = [0,100],
     summary: str ="medianiq",
     relative: bool =True,
-    y_lims = dict(ps=(0.9, 1.5),ksns=(0, 20),ud=(0.9, 1.1)),
+    y_lims = None,
     keys = Iterable[str]
     # **kwargs,
 ):
@@ -188,20 +189,29 @@ def plot_comparison(
             experiment.dataset.get_summary(key, relative=relative)
         )
 
-    axs = fig.subplots(len(keys), len(t_idxs),sharex=True)
+    axs = fig.subplots(len(keys), len(t_idxs),sharex=True, sharey='row')
+    colors = plt.cm.Blues(jnp.linspace(0,1,len(experiments)))
+    colors=['black', 'tab:blue']
 
-    # breakpoint()
+
+    if len(axs.shape) == 1: axs = axs[None,:]
+    print(axs.shape)
+    
+
     for row, key in zip(axs, keys):
-        for experiment in experiments:
+        for color, experiment in zip(colors, experiments):
             _ = experiment.get_X_and_mask_from_view(x_view)
             dendrite_mask, dendrite_X, spine_mask, spine_X = _
 
             for ax, t_idx in zip(row, t_idxs):
                 l,m,h = quick_mapper(key, experiment, t_idx)
-                ax.plot(spine_X, m, '-')
-                ax.fill_between(spine_X, l, h, alpha=0.2)
-                ax.set_ylim(y_lims['ps'])
+                ax.plot(spine_X, m, '-o', color=color, lw=2)
+                ax.plot(spine_X, l, '-', color=color,lw=0.5)
+                ax.plot(spine_X, h, '-', color=color,lw=0.5)
+                ax.fill_between(spine_X, l, h, alpha=0.2, color=color)
+                # ax.set_ylim(y_lims[key])
 
                 for x in experiment.xs_stim:
-                    ax.axvline(x)
+                    ax.axvline(x, color='tab:orange', lw=1, linestyle='--',
+                               zorder=-10)
 

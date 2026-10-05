@@ -22,12 +22,14 @@ run_experiment:
 from __future__ import annotations
 import hashlib
 import pickle
-from typing import NamedTuple
+from typing import NamedTuple, Iterable
 from pathlib import Path
 
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+
+import pandas as pd
 
 import rdn.rebuttal.differential_model as diffm
 from rdn.rebuttal.parameters import Parameters
@@ -111,6 +113,7 @@ class Result(NamedTuple):
             experiment = pickle.load(f)
         return experiment
 
+
     @staticmethod
     def safe_load(
         parameters, path_to_save_folder
@@ -131,6 +134,40 @@ class Result(NamedTuple):
             return filename, None
 
 
+    @staticmethod
+    def save(experiment: Result, path_to_save_file: str) -> None:
+        with open(path_to_save_file, "wb") as f:
+            pickle.dump(experiment, f)
+
+
+    @staticmethod
+    def cast_spines_to_dataframe(
+        results: Iterable[Results],
+    ) -> pd.DataFrame:
+
+        keys = ['ps','ks','ns']
+
+        for result in results:
+            # first we make the indexes from the dataset. The shape is
+            # n_trials, n_times, n_spines
+            index = pd.MultiIndex.from_product(
+                map(range, result.dataset.yt['ks'].shape),
+                names=['session', 't_idx', 'spine_idx'],
+            )
+
+            df = pd.DataFrame(
+                [result.dataset.yt[k] for k in keys],
+                index=index,
+                columns=keys,
+            )
+
+            breakpoint()
+
+            
+
+
+
+
     def get_X_and_mask_from_view(self, x_view: list):
         '''Returns the X and the mask to apply to the Y positions in order to
         plot the view in question '''
@@ -148,13 +185,6 @@ class Result(NamedTuple):
             spine_mask,
             spine_X,
         )
-
-
-    @staticmethod
-    def save(experiment: Result, path_to_save_file: str) -> None:
-        with open(path_to_save_file, "wb") as f:
-            pickle.dump(experiment, f)
-
 
 
 
