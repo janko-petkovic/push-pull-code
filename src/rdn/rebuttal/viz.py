@@ -1,7 +1,9 @@
+from functools import partial
 import jax.numpy as jnp
-from typing import Iterable
+from typing import Sequence
 import matplotlib.pyplot as plt
-from numpy import expand_dims
+from rdn.rebuttal.experiment import Result
+
 
 
 def consistency_plot(experiment, ax):
@@ -169,15 +171,16 @@ def plot_cool(
     ax.set_ylabel('Post-pre ratio')
     ax.set_xlabel(r'Position along dendrite $[\mu m]$')
 
+
 def plot_comparison(
     fig,
-    experiments,
-    t_idxs: Iterable[int],
-    x_view: Iterable[int] = [0,100],
+    experiments: Sequence[Result],
+    t_idxs: Sequence[int],
+    x_view: Sequence[int] = [0,100],
     summary: str ="medianiq",
     relative: bool =True,
     y_lims = None,
-    keys = Iterable[str]
+    key = str
     # **kwargs,
 ):
     '''n_experiments rows, t_idx cols'''
@@ -189,29 +192,66 @@ def plot_comparison(
             experiment.dataset.get_summary(key, relative=relative)
         )
 
-    axs = fig.subplots(len(keys), len(t_idxs),sharex=True, sharey='row')
+    axs = fig.subplots(4, len(t_idxs),
+                       sharex=True, sharey='row',
+                       height_ratios=(2,1,1,1))
     colors = plt.cm.Blues(jnp.linspace(0,1,len(experiments)))
     colors=['black', 'tab:blue']
-
-
-    if len(axs.shape) == 1: axs = axs[None,:]
-    print(axs.shape)
     
+    # This logic is not the best, but we implement it this way for this
+    # time
+    for col, t_idx in zip(axs.T, t_idxs):
+        _ = experiments[0].get_X_and_mask_from_view(x_view)
+        dendrite_mask, dendrite_X, spine_mask, spine_X = _
 
-    for row, key in zip(axs, keys):
-        for color, experiment in zip(colors, experiments):
-            _ = experiment.get_X_and_mask_from_view(x_view)
-            dendrite_mask, dendrite_X, spine_mask, spine_X = _
+        ld,md,hd = quick_mapper(key, experiments[0], t_idx)
+        lq,mq,hq = quick_mapper(key, experiments[1], t_idx)
 
-            for ax, t_idx in zip(row, t_idxs):
-                l,m,h = quick_mapper(key, experiment, t_idx)
-                ax.plot(spine_X, m, '-o', color=color, lw=2)
-                ax.plot(spine_X, l, '-', color=color,lw=0.5)
-                ax.plot(spine_X, h, '-', color=color,lw=0.5)
-                ax.fill_between(spine_X, l, h, alpha=0.2, color=color)
-                # ax.set_ylim(y_lims[key])
+        ax = col[0]
+        ax.scatter(spine_X, md, color=colors[0], s=10,)
+        ax.plot(spine_X, ld, color=colors[0],lw=0.5, linestyle=(0,(8,4)))
+        ax.plot(spine_X, hd, color=colors[0],lw=0.5, linestyle=(0,(8,4)))
+        ax.fill_between(spine_X, ld, hd, alpha=0.2, color=colors[0], lw=0)
 
-                for x in experiment.xs_stim:
-                    ax.axvline(x, color='tab:orange', lw=1, linestyle='--',
-                               zorder=-10)
+        ax.scatter(spine_X, mq, s=10, color=colors[1])
+        ax.plot(spine_X, lq, '-', color=colors[1],lw=1)
+        ax.plot(spine_X, hq, '-', color=colors[1],lw=1)
+        ax.fill_between(spine_X, lq, hq, alpha=0.2, color=colors[1])
+
+        ax = col[1]
+        ax.plot(spine_X, (hq-hd)/hd*100, '-', color='tab:red', lw=2)
+
+        ax = col[2]
+        ax.plot(spine_X, (mq-md)/md*100, '-', color='gray', lw=2)
+
+        ax = col[3]
+        ax.plot(spine_X, (lq-ld)/ld*100, '-', color='tab:green', lw=2)
+
+        col[0].set_title(f'{t_idx} min')
+
+        col[-1].set_xticks((42,50,58))
+        col[-1].set_xlabel("Spine position [um]")
+
+    for x in experiments[0].xs_stim:
+        for ax in axs.flatten():
+            ax.axvline(x, color='tab:orange', lw=1,
+                   zorder=-10)
+
+    for ax in axs[1:].flatten():
+        ax.axhline(y=0, linestyle='--', lw=1, c='black')
+        ax.grid(visible=True, axis='y')
+        ax.set_ylim(-25,25)
+        ax.set_yticks((-15,0,15))
+
+    col = axs.T[0]
+    col[0].set_ylabel('Response\nratio', weight='bold', labelpad=10)
+    col[1].set_ylabel('Q3')
+    col[2].set_ylabel('Med')
+    col[3].set_ylabel('Q1')
+    col[3].text(0.06, 0.18,'Relative error', weight='bold',
+                transform=plt.gcf().transFigure,
+                rotation=90,
+                )
+
+    fig.subplots_adjust(wspace=0.1)
 

@@ -87,6 +87,7 @@ class Dataset:
 
         if summary == "medianiq":
             l, m, h = jnp.quantile(Y, jnp.array((0.25, 0.5, 0.75)), axis=0)
+
         elif summary == "meansem":
             mean = jnp.mean(Y, axis=0)
             sem = jnp.std(Y, axis=0) / jnp.sqrt(len(Y))

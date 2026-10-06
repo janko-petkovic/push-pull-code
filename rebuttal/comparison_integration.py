@@ -15,51 +15,45 @@ def _():
     jax.config.update('jax_enable_x64', True)
     plt.style.use('default')
 
-
     return Path, plt, run_experiment, viz
 
 
 @app.cell
-def _(Path, experiment_diff, experiment_qss, plt, run_experiment, viz):
+def _(Path, plt, run_experiment, viz):
     def model_comparison():
         PATH_TO_PAR_FOLDER = Path(__file__).parent / "parameters/"
         PATH_TO_SAVE_FOLDER = Path(__file__).parent / "output/"
-    
-        # differential = PATH_TO_PAR_FOLDER / '3_stim_differential.toml'
-        # qss = PATH_TO_PAR_FOLDER / '3_stim_qss.toml'
 
-        # experiment_diff = run_experiment(
-        #         differential, PATH_TO_SAVE_FOLDER, force_new_simulation=False)
-        # experiment_qss = run_experiment(
-        #         qss, PATH_TO_SAVE_FOLDER, force_new_simulation=False)
-
-        diff_experiments = []
-        qss_experiments = []
+        # I should parse the number of stimulations from inside the par file 
+        # but for this time I will just parse it from the par string
+        diff_experiments = {}
+        qss_experiments = {}
 
         for file in PATH_TO_PAR_FOLDER.iterdir():
             path_to_parameters = PATH_TO_PAR_FOLDER / file
             experiment = run_experiment(path_to_parameters, PATH_TO_SAVE_FOLDER)
 
-            if "qss" in file: 
-                qss_experiments.append(experiment)
+            if "qss" in file.name: 
+                qss_experiments[file.name[0]] = experiment
             else:
-                diff_experiments.append(experiment)
+                diff_experiments[file.name[0]] = experiment
 
-        t_idxs = (2,10,20,30,)
+        t_idxs = (2,10,20,30)
         x_view = [41,61]
         y_lims = dict(ps=(0.5, 2.5), ksns=(0, 20), ud=(0.9, 1.1))
 
-        fig = plt.figure(figsize=(12,1), dpi=200)
-
-        viz.plot_comparison(
-            fig,
-            (experiment_diff, experiment_qss,),
-            t_idxs,
-            x_view,
-            summary='medianiq',
-            # y_lims=y_lims,
-            keys=('ps',),
-        )
+        for nss in [1,3,5,7]:
+            fig = plt.figure(figsize=(12,3), dpi=200)
+    
+            viz.plot_comparison(
+                fig,
+                (diff_experiments[f'{nss}'], qss_experiments[f'{nss}'],),
+                t_idxs,
+                x_view,
+                summary='medianiq',
+                # y_lims=y_lims,
+                key='ps',
+            )
 
 
     def _main():
@@ -67,6 +61,11 @@ def _(Path, experiment_diff, experiment_qss, plt, run_experiment, viz):
         plt.show()
 
     _main()
+    return
+
+
+@app.cell
+def _():
     return
 
 
