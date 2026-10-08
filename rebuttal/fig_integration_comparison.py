@@ -18,16 +18,12 @@ def _():
 
 
 @app.cell
-def _(Path):
-    print(Path(__file__).name)
-    return
-
-
-@app.cell
 def _(Path, plt, run_experiment, viz):
     def model_comparison():
-        PATH_TO_PAR_FOLDER = Path(__file__).parent / "parameters/"
-        PATH_TO_SAVE_FOLDER = Path(__file__).parent / "output/"
+        root = Path(__file__).parent
+        stem = Path(__file__).stem
+        PATH_TO_PAR_FOLDER =  root / "parameters/" / stem 
+        PATH_TO_SAVE_FOLDER = root / "output/"
 
         # I should parse the number of stimulations from inside the par file 
         # but for this time I will just parse it from the par string
@@ -38,7 +34,7 @@ def _(Path, plt, run_experiment, viz):
             path_to_parameters = PATH_TO_PAR_FOLDER / file
             experiment = run_experiment(path_to_parameters, PATH_TO_SAVE_FOLDER)
 
-            if "qss" in file.name: 
+            if "qss" in file.stem: 
                 qss_experiments[file.name[0]] = experiment
             else:
                 diff_experiments[file.name[0]] = experiment

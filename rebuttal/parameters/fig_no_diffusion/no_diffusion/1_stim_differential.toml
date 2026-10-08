@@ -1,0 +1,71 @@
+[species]
+[species.unphosphorylated]
+diffusion_coeff = 0.00000001
+# k = 1
+# I think its easier to just leave this here and eyeball Pi. The steady state
+# will be computed in function of this, in the order p=u*k/n, sizes=p^alpha,
+# u_s = size*concentration
+k_in = 1
+k_out = 1
+
+# CaMK2 is 46 uM
+initial_concentration = 30000 #(per um cubed)
+
+[species.phosphorylated]
+# The phosphorylated species does not diffuse (too difficult otherwise)
+diffusion_coeff = 0 # um^2/s
+# k_in = 1 # 1/s
+# k_out = 1
+
+[species.kinases]
+diffusion_coeff = 0
+k_in = 1
+k_out = 1
+tau = 616.8 # in seconds
+delta_stim = 700 #30000
+sigma = 1 # in um
+k_cat = 1
+log_mu = 8.10 # quantity, not concentration (that one depends on alpha)
+log_var = 0.32 # accordingly
+# this is supposed to be the same for kinases and phosphatases. I
+# cannot find a place to define it uniquely so I put it here
+log_cross_cov = 0.28
+
+[species.phosphatases]
+diffusion_coeff = 0
+k_in = 1
+k_out = 1
+tau = 648 # in seconds
+delta_stim =  852 #36551
+sigma = 1.19 #i in um
+k_cat = 1
+log_mu = 8.82
+log_var = 0.35
+log_cross_cov = 0.2
+
+[dendrite]
+# For now we consider one spine every two microns
+n_spines = 100
+alpha = 1
+
+[integration]
+model_type='differential'
+seed = 2026
+dt = 1 # seconds
+dx = 0.5 # um
+
+[experiment] # the time unit applies to all time params
+n_sessions = 40
+time_unit = "min" # "min" or "s" or "ms"
+
+[experiment.observation]
+spine_limits = [0,100] # array indexing (remember exclusive upper bound!)
+# spine_limits = [0,100] # array indexing (remember exclusive upper bound!)
+time_range = [0,40] # usual array indexing [min, max)
+
+[experiment.uncaging_protocol]
+active = true 
+with_failure = false
+frequency = 0.5 # Hz
+duration = 2
+spine_locations = [50] # array indexing
