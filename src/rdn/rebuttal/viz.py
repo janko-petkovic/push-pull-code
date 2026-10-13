@@ -2,6 +2,8 @@ from functools import partial
 import jax.numpy as jnp
 from typing import Sequence
 import matplotlib.pyplot as plt
+from matplotlib import ticker
+
 from rdn.rebuttal.experiment import Result
 
 
@@ -236,7 +238,6 @@ def plot_comparison(
     x_view: Sequence[int] = [0,100],
     summary: str ="medianiq",
     relative: bool =True,
-    y_lims: dict = dict(ps=(0.5, 2.5), ksns=(0, 20), ud=(0.9, 1.1)),
     key: str = 'ps',
     compact: bool = False,
     **kwargs,
@@ -251,7 +252,6 @@ def plot_comparison(
             x_view,
             summary,
             relative,
-            y_lims,
             key,
         )
         return None 
@@ -280,6 +280,9 @@ def plot_comparison(
         ld,md,hd = quick_mapper(key, experiments[0], t_idx)
         lq,mq,hq = quick_mapper(key, experiments[1], t_idx)
 
+        iqld, iqhd = md - ld, hd - md
+        iqlq, iqhq = mq - lq, hq - mq
+
         ax = col[0]
         ax.scatter(spine_X, md, color=colors[0], s=20,)
         # ax.plot(spine_X, ld, color=colors[0],lw=0.5, linestyle=(0,(8,4)))
@@ -299,15 +302,15 @@ def plot_comparison(
                         ec="none")
 
         ax = col[1]
-        ax.plot(spine_X, (hq-hd)/hd*100, '-', color='black', lw=3,
-                markersize=5)
-
-        ax = col[2]
         ax.plot(spine_X, (mq-md)/md*100, '-', color='black', lw=3,
                 markersize=5)
 
+        ax = col[2]
+        ax.plot(spine_X, (iqhq-iqhd)/md*100, '-', color='black', lw=2,
+                markersize=5)
+
         ax = col[3]
-        ax.plot(spine_X, (lq-ld)/ld*100, '-', color='black', lw=3,
+        ax.plot(spine_X, (iqlq-iqld)/md*100, '-', color='black', lw=2,
                 markersize=5)
 
         col[0].set_title(f'{t_idx} min')
@@ -324,14 +327,17 @@ def plot_comparison(
     for ax in axs[1:].flatten():
         ax.axhline(y=0, linestyle='--', lw=1, c='black')
         ax.grid(visible=True, axis='y')
-        ax.set_ylim(-25,25)
-        ax.set_yticks((-15,0,15))
+        ax.set_ymargin(0.5)
+        ax.set_ylim(kwargs.get('y_lims'))
+        if kwargs.get('y_ticks') is not None:
+            ax.set_yticks(kwargs.get('y_ticks'))
 
     col = axs.T[0]
+
     col[0].set_ylabel('Response\nratio', weight='bold', labelpad=10)
-    col[1].set_ylabel('Q3')
-    col[2].set_ylabel('Med')
-    col[3].set_ylabel('Q1')
+    col[1].set_ylabel('Med')
+    col[2].set_ylabel('IQ 2')
+    col[3].set_ylabel('IQ 3')
     col[3].text(32, 0, 'Relative\ndifference [%]', weight='bold',
                 rotation=90, ha='center'
                 )

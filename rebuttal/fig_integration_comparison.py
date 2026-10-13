@@ -43,17 +43,20 @@ def _(Path, plt, run_experiment, viz):
         x_view = [41,61]
         y_lims = dict(ps=(0.5, 2.5), ksns=(0, 20), ud=(0.9, 1.1))
 
-        for nss in [1,3,5,7]:
-            fig = plt.figure(figsize=(12,3), dpi=200)
+        fig = plt.figure(figsize=(12,12), dpi=200)
+        subfigs = fig.subfigures(4,1, hspace=0.1)
 
+        for subfig, nss in zip(subfigs, [1,3,5,7]):
             viz.plot_comparison(
-                fig,
+                subfig,
                 (diff_experiments[f'{nss}'], qss_experiments[f'{nss}'],),
                 t_idxs,
                 x_view,
                 summary='medianiq',
-                # y_lims=y_lims,
+                y_lims=y_lims,
                 key='ps',
+                compact=False,
+                colors=('black', 'tab:blue'),
             )
 
 
