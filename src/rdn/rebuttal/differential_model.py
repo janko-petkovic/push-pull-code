@@ -324,6 +324,8 @@ def setup_rdn_uncaging_mask(key, parameters, y0):
     stim_locations = parameters.experiment.uncaging_protocol.spine_locations
     # breakpoint()
     x = y0['ps'][jnp.array(stim_locations)]
+
+    # These are the probabilities when failure is introduced!
     ps_uncaging = 1- jnp.exp(-x**2/1000000000)
 
     assert dt < 1 / unc_freq, (
@@ -366,3 +368,4 @@ def setup_rdn_uncaging_mask(key, parameters, y0):
     # breakpoint()
     ### EXIT 2
     return unc_mask
+
