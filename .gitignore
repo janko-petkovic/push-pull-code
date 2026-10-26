@@ -16,3 +16,4 @@ docs/*/output/aux/*
 
 # Simulation results
 *.hdf5
+*.pkl

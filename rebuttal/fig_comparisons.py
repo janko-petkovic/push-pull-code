@@ -31,8 +31,8 @@ def _(Path, plt, run_experiment, viz):
         # - no_diffusion
         # - no_sigma
         # - wide_sigma
-        PATH_TO_PAR_FOLDER_ALT =  root / "parameters/" / "no_sigma"
-    
+        PATH_TO_PAR_FOLDER_ALT =  root / "parameters/" / "fast_diffusion"
+
         PATH_TO_SAVE_FOLDER = root / "output/"
 
         # I should parse the number of stimulations from inside the par file 

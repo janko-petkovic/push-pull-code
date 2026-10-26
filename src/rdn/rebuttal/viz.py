@@ -57,12 +57,6 @@ def plot_snapshot(
     ax.bar(spine_X+0.15, m, width=0.3, yerr=(m-l, h-m), ecolor='mediumvioletred', color='mediumvioletred')
     ax.set_ylim(y_lims['ksns'])
 
-    # ax = axs[2]
-    # l,m,h = quick_mapper('ud')
-    # ax.plot(dendrite_X, m, '-', color='gray')
-    # ax.fill_between(dendrite_X, l, h, alpha=0.2, color='gray')
-    # ax.set_ylim(y_lims['ud'])
-
     for ax in axs:
         for x in experiment.xs_stim:
             ax.axvline(x)
@@ -348,28 +342,14 @@ def plot_comparison(
 def plot_bartol(
     fig,
     experiment: Sequence[Result],
-    t_idxs: Sequence[int],
-    x_view: Sequence[int] = [0,100],
-    summary: str ="medianiq",
-    key: str = 'ps',
-    compact: bool = False,
     **kwargs,
 ):
     '''n_experiments rows, t_idx cols'''
-    
-    # breakpoint()
-
-    # def quick_mapper(key, experiment, t_idx):
-    #     mask = dendrite_mask if 'd' in key else spine_mask
-    #     return map(
-    #         lambda x: x[t_idx, mask], 
-    #         experiment.dataset.get_summary(key, relative=relative)
-    #     )
 
     import pandas as pd
     import numpy as np
     import seaborn as sns
-    from scipy.stats import pearsonr
+    from scipy.stats import linregress
 
     timepoints =[t.item() for t in experiment.ts]
     sessions = [s.item() for s in jnp.arange(experiment.dataset.yt['ps'].shape[0])]
@@ -377,8 +357,10 @@ def plot_bartol(
     multi_index = pd.MultiIndex.from_product(
         (sessions, timepoints), names=['session', 't'],
     )
+
     stim_indexes = np.array(experiment.xs_stim)
-    test_indexes = np.array([20,80])
+    test_indexes = np.array([0,-1])
+    QUERY_STR = 't == 299'
 
     stim_srs = np.stack([experiment.dataset.yt['ps'][:,:, si] for si in
                          stim_indexes])
@@ -392,87 +374,110 @@ def plot_bartol(
         columns=['a','b','ta','tb'],
         index=multi_index
     )
+
+    df = df.query(QUERY_STR)
+
+    for col in df.columns:
+        df[f'log_{col}'] = np.log(df[col])
+
+    # ORDERING
+    m = df['a'] >= df['b']
+    df['first'] = np.where(m, df['a'], df['b']) 
+    df['second'] = np.where(m, df['b'], df['a']) 
+    df['log_first'] = np.where(m, df['log_a'], df['log_b']) 
+    df['log_second'] = np.where(m, df['log_b'], df['log_a']) 
+    plot_min, plot_max = df['log_second'].min(), df['log_first'].max()
+
+
+    m = df['ta'] >= df['tb']
+    df['test_first'] = np.where(m, df['ta'], df['tb']) 
+    df['test_second'] = np.where(m, df['tb'], df['ta']) 
+    df['log_test_first'] = np.where(m, df['log_ta'], df['log_tb']) 
+    df['log_test_second'] = np.where(m, df['log_tb'], df['log_ta']) 
+    plot_test_min, plot_test_max = (
+        df['log_test_second'].min(), df['log_test_first'].max()
+    )
+
+    sirpe = linregress(
+        df['log_first'], 
+        df['log_second']
+    )
+
+    test_sirpe = linregress(
+        df['log_test_first'], 
+        df['log_test_second'], 
+    )
+
+    print(sirpe.rvalue**2)
+    print(test_sirpe.rvalue**2)
+    print(sirpe.pvalue)
+    print(test_sirpe.pvalue)
+
+    axs = fig.subplots(1,2)
+
+    ax = sns.regplot(
+        df,
+        x='log_first',
+        y='log_second',
+        ax=axs[0],
+        color='tab:blue',
+    )
+
+    ax.plot(
+        (plot_min, plot_max),
+        (plot_min, plot_max),
+        c='black',
+        linestyle=(0,(10,4)),
+        lw=1,
+    )
+
+    ax.text(
+        0.14,0.65, 
+        (
+            fr'$y = {sirpe.slope:.2f}*x - {np.abs(sirpe.intercept):.2f}$'
+            +'\n'
+            +fr'$r^2 = {sirpe.rvalue**2:.2f}$'
+            +'\n'
+            +fr'$n = {max(sessions)+1}$'
+        ),
+        transform=fig.transFigure,
+    )
+    ax.set_title('Stimulated spines')
     
-    print(pearsonr(np.log(df['a']), np.log(df['b']),))
-    print(pearsonr(np.log(df['ta']), np.log(df['tb']),))
+    ax = sns.regplot(
+        df,
+        x='log_test_first',
+        y='log_test_second',
+        color='black',
+        ax=axs[1]
+    )
 
-    sns.regplot(df.query("t == @timepoints"),x='a',y='b',)
-    # sns.regplot(df.query("t == @timepoints"),x='ta',y='tb')
+    ax.plot(
+        (plot_test_min, plot_test_max),
+        (plot_test_min, plot_test_max),
+        c='black',
+        linestyle=(0,(10,4)),
+        lw=1,
+    )
 
+    ax.text(
+        0.6,0.65, 
+        (
+            fr'$y = {test_sirpe.slope:.2f}*x + {test_sirpe.intercept:.2f}$'
+            +'\n'
+            +fr'$r^2 = {test_sirpe.rvalue**2:.2f}$'
+            +'\n'
+            +fr'$n = {max(sessions)+1}$'
+        ),
+        transform=fig.transFigure,
+    )
 
-    # quick_mapper(key, experiments[0], t_idx)
+    ax.set_title('Non-stimulated spines')
 
-    #
-    # axs = fig.subplots(4, len(t_idxs),
-    #                    sharex=True, sharey='row',
-    #                    height_ratios=(2,1,1,1))
-    # if kwargs.get('colors') is None:
-    #     colors=['black', 'tab:blue']
-    # else:
-    #     colors = kwargs.get('colors')
-    #
-    # # This logic is not the best, but we implement it this way for this
-    # # time
-    # for col, t_idx in zip(axs.T, t_idxs):
-    #     _ = experiments[0].get_X_and_mask_from_view(x_view)
-    #     dendrite_mask, dendrite_X, spine_mask, spine_X = _
-    #
-    #     ld,md,hd = quick_mapper(key, experiments[0], t_idx)
-    #     lq,mq,hq = quick_mapper(key, experiments[1], t_idx)
-    #
-    #     iqld, iqhd = md - ld, hd - md
-    #     iqlq, iqhq = mq - lq, hq - mq
-    #
-    #     ax = col[0]
-    #     ax.scatter(spine_X, md, color=colors[0], s=20,)
-    #     ax.fill_between(spine_X, ld, hd, alpha=0.4, color=colors[0], lw=0)
-    #
-    #     ax.scatter(spine_X, mq, s=20, color=colors[1])
-    #     ax.plot(spine_X, lq, '-', color=colors[1],lw=2)
-    #     ax.plot(spine_X, hq, '-', color=colors[1],lw=2)
-    #     ax.fill_between(spine_X, lq, hq, facecolor="none", hatch='//////',
-    #                     hatchcolor=colors[1], hatch_linewidth=0.5,
-    #                     ec="none")
-    #
-    #     ax = col[1]
-    #     ax.plot(spine_X, (mq-md)/md*100, '-', color='black', lw=3,
-    #             markersize=5)
-    #
-    #     ax = col[2]
-    #     ax.plot(spine_X, (iqhq-iqhd)/md*100, '-', color='black', lw=2,
-    #             markersize=5)
-    #
-    #     ax = col[3]
-    #     ax.plot(spine_X, (iqlq-iqld)/md*100, '-', color='black', lw=2,
-    #             markersize=5)
-    #
-    #     col[0].set_title(f'{t_idx} min')
-    #     col[0].set_yticks((1,1.5))
-    #
-    #     col[-1].set_xticks((42,50,58))
-    #     col[-1].set_xlabel(r"Spine position [$\mu m$]")
-    #
-    # for x in experiments[0].xs_stim:
-    #     for ax in axs.flatten():
-    #         ax.axvline(x, color='tab:orange', lw=1,
-    #                zorder=-10)
-    #
-    # for ax in axs[1:].flatten():
-    #     ax.axhline(y=0, linestyle='--', lw=1, c='black')
-    #     ax.grid(visible=True, axis='y')
-    #     ax.set_ymargin(0.5)
-    #     ax.set_ylim(kwargs.get('y_lims'))
-    #     if kwargs.get('y_ticks') is not None:
-    #         ax.set_yticks(kwargs.get('y_ticks'))
-    #
-    # col = axs.T[0]
-    #
-    # col[0].set_ylabel('Response\nratio', weight='bold', labelpad=10)
-    # col[1].set_ylabel('Med')
-    # col[2].set_ylabel('IQ 2')
-    # col[3].set_ylabel('IQ 3')
-    # col[3].text(32, 0, 'Relative\ndifference [%]', weight='bold',
-    #             rotation=90, ha='center'
-    #             )
+    for ax in axs:
+        ax.set_xmargin(0.1)
+        ax.set_ymargin(0.1)
+        ax.set_xlabel('log spine size 1')
+        ax.set_ylabel('log spine size 2')
 
-    # fig.subplots_adjust(wspace=0.1)
+    fig.subplots_adjust(wspace=0.5, bottom=0.2)
