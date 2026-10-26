@@ -50,7 +50,7 @@ alpha = 1
 
 [integration]
 model_type = 'differential'
-seed = 2026
+seed = 1
 dt = 1 # THIS IS ALWAYS GIVEN IN SECONDS
 dx = 0.5 # um
 
@@ -62,12 +62,11 @@ time_unit = "s" # "min" or "s" or "ms"
 
 [experiment.observation]
 spine_limits = [0,100] # array indexing (remember exclusive upper bound!)
-# spine_limits = [0,100] # array indexing (remember exclusive upper bound!)
-time_range = [0,180] # usual array indexing [min, max)
+time_range = [0,300] # usual array indexing [min, max)
 
 [experiment.uncaging_protocol]
 active = true 
 with_failure = false
 frequency = 0.5 # Hz
-duration = 2
-spine_locations = [45, 53] # array indexing
+duration = 300
+spine_locations = [45, 55] # array indexing

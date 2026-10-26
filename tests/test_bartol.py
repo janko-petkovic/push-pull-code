@@ -19,16 +19,21 @@ def test_bartol():
     x_view = [41,61]
     y_lims = dict(ps=(0.5, 2.5),ksns=(0, 30),ud=(0.9, 1.1))
 
-    fig = plt.figure(figsize=(12,3), dpi=100)
-
+    # fig = plt.figure(figsize=(12,3), dpi=100)
+    # viz.plot_snapshot(
+    #     fig,
+    #     experiment_diff,
+    #     180,
+    #     x_view = x_view,
+    #     summary="medianiq",
+    #     relative=True,
+    #     y_lims = y_lims,
+    # )
+    #
+    fig = plt.figure(figsize=(7,3), dpi=100)
     viz.plot_bartol(
         fig,
         experiment_diff,
-        t_idxs,
-        x_view,
-        summary='medianiq',
-        y_lims=y_lims,
-        keys=('ps', 'ks', 'ns'),
     )
 
     plt.show()
