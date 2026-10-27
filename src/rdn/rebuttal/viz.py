@@ -222,6 +222,10 @@ def _compact_plot_comparison(
                 ax.axvline(x, color='tab:orange', lw=1, zorder=-10)
 
     axs[0].set_ylabel('Response\nratio', weight='bold', labelpad=10)
+
+    for ax in axs[1:].flatten():
+        ax.set_ylim(-25,25)
+
     fig.subplots_adjust(wspace=0.1)
 
 
