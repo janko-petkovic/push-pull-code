@@ -29,10 +29,10 @@ def _(Path, plt, run_experiment, viz):
         # you want to visualize. Options are
         # - control
         # - no_diffusion
+        # - fast_diffusion
         # - no_sigma
         # - wide_sigma
-        PATH_TO_PAR_FOLDER_ALT =  root / "parameters/" / "fast_diffusion"
-
+        PATH_TO_PAR_FOLDER_ALT =  root / "parameters/" / "no_diffusion"
         PATH_TO_SAVE_FOLDER = root / "output/"
 
         # I should parse the number of stimulations from inside the par file 
@@ -60,7 +60,7 @@ def _(Path, plt, run_experiment, viz):
 
         t_idxs = (2,10,20,30)
         x_view = [41,61]
-        y_lims = (-10,10)
+        y_lims = (-50,50)
         y_ticks = (-5,5)
 
         fig = plt.figure(figsize=(12,12), dpi=200)
@@ -74,10 +74,10 @@ def _(Path, plt, run_experiment, viz):
                 t_idxs,
                 x_view,
                 summary='medianiq',
-                # y_lims=y_lims,
+                y_lims=y_lims,
                 key='ps',
                 compact=False,
-                colors=('black', 'tab:red'),
+                colors=('black', 'tab:blue'),
                 # y_ticks=y_ticks
             )
 
@@ -87,6 +87,11 @@ def _(Path, plt, run_experiment, viz):
 
     data = model_comparison()
     plt.show()
+    return
+
+
+@app.cell
+def _():
     return
 
 
