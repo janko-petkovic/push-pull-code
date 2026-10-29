@@ -60,8 +60,8 @@ def _(Path, plt, run_experiment, viz):
 
         t_idxs = (2,10,20,30)
         x_view = [41,61]
-        y_lims = (-50,50)
-        y_ticks = (-5,5)
+        y_lims = (-25,25)
+        y_ticks = (-10,10)
 
         fig = plt.figure(figsize=(12,12), dpi=200)
         subfigs = fig.subfigures(4,1, hspace=0.1)
@@ -70,7 +70,7 @@ def _(Path, plt, run_experiment, viz):
             viz.plot_comparison(
                 subfig,
                 (diff_experiments['control'][f'{nss}'],
-                 diff_experiments['altered'][f'{nss}'],),
+                 qss_experiments['control'][f'{nss}'],),
                 t_idxs,
                 x_view,
                 summary='medianiq',
@@ -78,7 +78,7 @@ def _(Path, plt, run_experiment, viz):
                 key='ps',
                 compact=False,
                 colors=('black', 'tab:blue'),
-                # y_ticks=y_ticks
+                y_ticks=y_ticks
             )
 
         return diff_experiments
