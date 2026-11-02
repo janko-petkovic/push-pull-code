@@ -1,4 +1,7 @@
-"""Spatial activation profile of CaMKII and calcineurin (CaN) along a dendrite,
+"""
+Contains all the objects for the diffusion uptake figures.
+
+Spatial activation profile of CaMKII and calcineurin (CaN) along a dendrite,
 after repeated calcium influx at one location (x = 0).
 
 Units: uM, s, um.
@@ -24,24 +27,67 @@ from time import time
 import numpy as np
 from scipy import sparse
 from scipy.integrate import solve_ivp
+from tqdm import tqdm
 
 @dataclass(frozen=True)
 class Params:
-    ...
+    # geometry / numerics
+    half_length: float = 10.0        # um, domain [-L, L]
+    dx: float = 0.1           # um
+
+    # calcium
+    D_c: float = 13.0           # um^2/s, effective (Allbritton et al. 1992)
+    tau_c: float = 0.05         # s, removal (pumps + buffers)
+    kappa: float = 20.0         # endogenous buffer capacity (Sabatini 2002)
+
+    # CaM
+    m_tot: float = 40.0         # uM (Li et al. 2020)
+    D_m: float = 20.0           # um^2/s (Schmidt et al. 2007)
+    k_on_cm: float = 1000.0       # 1/s, Ca2+ loading of CaM at saturating Ca2+
+    k_h: float = 1.0            # uM, half-activation of CaM (assumption)
+    k_off_cm: float = 10.0        # 1/s, C-lobe Ca2+ off-rate (approximate)
+    
+    # CaMKII
+    K_tot: float = 80.0          # uM (Li et al. 2020)
+    D_K: float = 0.08            # um^2/s (Lu et al. 2014)
+    D_Km: float = 0.009          # um^2/s (Lu et al. 2014)
+    k_on_mk: float = 2.9         # 1/(uM s) (Li et al. 2020)
+    k_off_mk: float = 1.1        # 1/s (Putkey & Waxham 1996)
+
+    # CaN
+    N_tot: float = 8.0           # uM (Li et al. 2020)
+    D_N: float = 2.0             # um^2/s (estimate Swaminathan et al. 1997)
+    D_Nm: float = 0.             # um^2/s (estimate Swaminathan et al. 1997)
+    k_on_mn: float = 23.0        # 1/(uM s) (Li et al. 2020)
+    k_off_mn: float = 0.075      # 1/s (Kd ~ 3.3 nM)
+
+    # stimulus: n_pulses at freq, each an influx of duration pulse_dur
+    n_pulses: int = 60
+    freq: float = 0.5           # Hz
+    pulse_dur: float = 0.01     # s
+    pulse_width: float = 0.25   # um, Gaussian footprint (spine-head size)
+    influx: float = 50.0        # uM/s at the centre during a pulse
+    t_after: float = 10.0       # s of recording after the last pulse
+
 
 @dataclass(frozen=True)
-class DiffusionUptakeResult:
+class Solution:
     t: np.array
+    x: np.array
     c: np.array
     m: np.array
+    mca: np.array
     K: np.array
+    Km: np.array
     N: np.array
+    Nm: np.array
 
     def fields(self):
-        return ( self.c, self.m, self.K, self.N)
+        return ( self.c, self.m, self.K, self.Km, self.N, self.Nm)
+
 
 @dataclass
-class DiffusionUptakeModel:
+class Model:
     '''the dendritic system, we take out the spine to simplify things,
     supposing that the overall behaviour should be just a scaled version
 
@@ -66,12 +112,12 @@ class DiffusionUptakeModel:
         self.laplacian = sparse.diags_array(
             (np.ones(N-1), main_diag, np.ones(N-1)),
             offsets=(-1,0,1),
-        )
+        )/self.p.dx**2
         
         # SPARSITY JACOBIAN
         # 1. first hte reactions of the species at the point of contact
         point = sparse.kron(
-            np.ones((4,4)),         # big blocks = species
+            np.ones((7,7)),         # big blocks = species
             sparse.eye_array(N)     # small cells = x coordinate
         )
 
@@ -83,35 +129,44 @@ class DiffusionUptakeModel:
         empty = sparse.csr_array((N,N))
 
         self.jac_sparsity = (
-            point + sparse.block_diag([tri, tri, empty, empty], format='csr')
+            point + sparse.block_diag([tri, tri, tri, tri, tri, tri, tri], format='csr')
         ).astype(bool)
 
 
     def RHS(self, t, y, stim_on,):
         '''y shape 4*N'''
         p, n_nodes = self.p, self.n_nodes
-        c, m, K, N = (
-            y[:n_nodes], y[n_nodes:2*n_nodes], y[2*n_nodes:3*n_nodes],
-            y[3*n_nodes:]
-        )
+        c, m, mca, K, Km, N, Nm = [
+            y[i*n_nodes:(i+1)*n_nodes] for i in range(7)
+        ]
 
         # intermediates
-        m_free = p.m_tot - m - K - N
         c_pos = np.maximum(c, 0.0) # in case c drops below 0 numerically
         h_c = c_pos**4 / (p.k_h**4 + c_pos**4) # as the even power would explode
-        mc_flux = p.k_on_cm * m_free * h_c - p.k_off_cm * m
+
 
         # stimulus c influx
         s = p.influx * self.c_profile if stim_on else 0.0
 
         #here go the equations
-        dK = p.k_on_mk * (p.K_tot - K) * m - p.k_off_mk * K
-        dN = p.k_on_mn * (p.N_tot - N) * m - p.k_off_mn * N
+        Km_flux = p.k_on_mk * K * mca - p.k_off_mk * Km
+        Nm_flux = p.k_on_mn * N * mca - p.k_off_mn * Nm
 
-        dc = p.D_c * self.laplacian @ c - 4/(1+p.kappa)*mc_flux - c/p.tau_c + s
-        dm = p.D_m * self.laplacian @ m + mc_flux - dK - dN
+        dKm = p.D_Km * self.laplacian @ Km + Km_flux
+        dNm = p.D_Nm * self.laplacian @ Nm + Nm_flux
 
-        return np.concatenate((dc, dm, dK, dN))
+        dK = p.D_K * self.laplacian @ K - Km_flux
+        dN = p.D_N * self.laplacian @ N - Nm_flux
+
+        mca_flux = p.k_on_cm * m * h_c - p.k_off_cm * mca
+
+        dm = p.D_m * self.laplacian @ m - mca_flux
+        dmca = p.D_m * self.laplacian @ mca + mca_flux - Km_flux - Nm_flux
+
+        dc = p.D_c * self.laplacian @ c - 4/(1+p.kappa)*mca_flux - c/p.tau_c + s
+
+
+        return np.concatenate((dc, dm, dmca, dK, dKm, dN, dNm))
 
 
     def simulate(self):
@@ -128,12 +183,21 @@ class DiffusionUptakeModel:
         t_end = p.n_pulses * period + p.t_after
         segments.append((p.n_pulses * period, t_end, False))
 
-        y0 = np.zeros(4*self.n_nodes)
+        c0 = np.zeros(self.n_nodes)
+        m0 = np.ones(self.n_nodes) * p.m_tot
+        mca0 = np.zeros(self.n_nodes)
+        K0 = np.ones(self.n_nodes) * p.K_tot
+        Km0 = np.zeros(self.n_nodes)
+        N0 = np.ones(self.n_nodes) * p.N_tot
+        Nm0 = np.zeros(self.n_nodes)
+
+        y0 = np.concatenate((c0, m0, mca0, K0, Km0, N0, Nm0))
 
         solution_t = []
-        solution_y = dict(c = [], m = [], K = [], N = [],)
+        solution_y = dict(c = [], m = [], mca = [], K = [], Km = [], N = [],
+                          Nm = [])
 
-        for (ta, tb, stim_on) in segments:
+        for (ta, tb, stim_on) in tqdm(segments):
             sol = solve_ivp(
                 self.RHS,
                 t_span=(ta,tb),
@@ -151,7 +215,7 @@ class DiffusionUptakeModel:
 
             solution_t.append(sol.t)
             for key, field in zip(
-                solution_y.keys(), sol.y.reshape(4,-1,sol.y.shape[-1])
+                solution_y.keys(), sol.y.reshape(7,-1,sol.y.shape[-1])
             ):
                 solution_y[key].append(field)
 
@@ -162,4 +226,5 @@ class DiffusionUptakeModel:
             solution_y[k] = np.concatenate(v, axis=1)
         
 
-        return DiffusionUptakeResult(solution_t, *solution_y.values())
+        return Solution(solution_t, self.x, *solution_y.values())
+

@@ -1,278 +1,276 @@
 import marimo
 
 __generated_with = "0.23.16"
-app = marimo.App()
+app = marimo.App(width="full")
 
 
 @app.cell
 def _():
     import marimo as mo
 
-    return (mo,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    # Uptake and conversion of diffusive resource
-
-    We suppose a calcium injection occurs at a given spine located at $x_i$.
-    Let's try to see what happens to the steady state distribution of the following system:
-    $$
-    \begin{aligned}
-        &k_t = v_k \, m \, \left( 1 - \frac{k}{k_{tot}} \right)\\[6pt]
-        &n_t = v_n \, m \, \left( 1 - \frac{n}{n_{tot}} \right)\\[6pt]
-        &m_t = v_m \, c \, \left( 1 - \frac{m + k + n}{m_{tot}} \right) - k_t - n_t\\[6pt]
-        &c_t = D_c \, c_{xx} - v_m \, c \, \left( 1 - \frac{m+k+n}{m_{tot}} \right)
-    \end{aligned}
-    $$
-
-    With no flux boundary conditions for c.
-
-    Remember that all the costants regarding spine quantities are piecewise defined functions, i.e. they are different from zero only at spine locations.
-    """)
     return
 
 
 @app.cell
 def _():
+    from dataclasses import replace
     import numpy as np
     import matplotlib.pyplot as plt
-    # plt.style.use('rdn.plotstyles.presentation')
+    from tqdm import tqdm
 
-    from scipy.optimize import curve_fit, least_squares
+    import rdn.rebuttal.diffusion_uptake as du
+    from scipy.optimize import least_squares
+    from scipy.integrate import trapezoid
 
-    return least_squares, np, plt
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    # Helper functions
-    """)
-    return
+    return du, least_squares, np, plt, replace, tqdm, trapezoid
 
 
 @app.cell
 def _(np):
-    class Problem():
-        def __init__(self, **params):
-            self.par_dict = self._setup_parameter_dict(**params)
+    def model_gauss(x,p):
+        return p[0] * np.exp(-x**2/p[1]**2)
 
+    def model_expon(x,p):
+        return p[0] * np.exp(-np.abs(x)/p[1])
 
-        def _setup_parameter_dict(self, **params) -> dict:
-            '''
-            Quick but unsafe way of coding parameters, the user has to remember
-            to give everythin that is needed.
-            '''
+    def residual(p, x, y, model):
+        return y - model(x,p)
 
-            v_ks = np.zeros(params['dendrite_length'])
-            v_ks[1::params['inter_spine_distance']] = params['v_k']
-
-            v_ns = np.zeros(params['dendrite_length'])
-            v_ns[1::params['inter_spine_distance']] = params['v_n']
-
-            v_ms = np.zeros(params['dendrite_length'])
-            v_ms[1::params['inter_spine_distance']] = params['v_m']
-
-            # Account for the time units of measure
-            for k, v in params.items():
-                if ('v_' in k) or ('tau_' in k):
-                    print(k)
-                    params[k] = v * params['dt']
-
-            return dict(v_ks=v_ks, v_ns=v_ns, v_ms=v_ms, **params)
-
-
-        def _DKDT(self, m, k):        
-            return self.par_dict['v_ks'] * (1-k/self.par_dict['k_tot']) * m 
-
-
-        def _DNDT(self, m, n):
-            return self.par_dict['v_ns'] * (1-n/self.par_dict['n_tot']) * m 
-
-
-        def _DMDT_production(self, c, m, k, n):
-            return self.par_dict['v_ms'] * (1-(k+n+m)/self.par_dict['m_tot']) * c 
-
-
-        def _DY(self, c, m, k, n, dt):
-            '''
-            Main euler-1 integration stepper
-            '''
-
-            dc = np.zeros_like(c)
-            dm = np.zeros_like(m)
-            dk = np.zeros_like(k)
-            dn = np.zeros_like(n)
-
-
-            dkdt = self._DKDT(m, k)
-            dk += dt * dkdt
-
-            dndt = self._DNDT(m, n)
-            dn += dt * dndt
-
-            dmdt_production = self._DMDT_production(c, m, k, n)
-
-
-            dm += dt * (dmdt_production) - dk - dn
-
-
-            dc[0] = dt * (self.par_dict['diff_c'] * (-c[0] + c[1]) - dmdt_production[0])
-            dc[-1] = dt * (self.par_dict['diff_c'] * (-c[-1] + c[-2]) - dmdt_production[-1])
-
-            dc[1:-1] = dt * (self.par_dict['diff_c'] * np.diff(c, 2) - dmdt_production[1:-1])
-
-
-            return dc, dm, dk, dn
-
-
-
-        def solve(self):
-            '''
-            Returns a result with the computed time series
-            '''
-
-            dt = self.par_dict['dt']
-            t_steps = int(self.par_dict['t_integration']/dt)        
-
-            # Initial conditions
-            cs = np.zeros(self.par_dict['dendrite_length'])
-            ms = np.zeros(self.par_dict['dendrite_length'])
-            ks = np.zeros(self.par_dict['dendrite_length'])
-            ns = np.zeros(self.par_dict['dendrite_length'])
-
-            # Apply the stimulus
-            cs[self.par_dict['idx_stimulus']] = self.par_dict['c_stimulus']
-
-            # Initialize the time arrays
-            cs_t = [cs.copy()]
-            ms_t = [ms.copy()]
-            ks_t = [ks.copy()]
-            ns_t = [ns.copy()]
-    
-            for _ in range(t_steps):
-
-                dc, dm, dk, dn = self._DY(cs_t[-1], ms_t[-1], ks_t[-1], ns_t[-1], dt)
-
-                cs_t.append(cs_t[-1] + dc)
-                ms_t.append(ms_t[-1] + dm)
-                ks_t.append(ks_t[-1] + dk)
-                ns_t.append(ns_t[-1] + dn)
-
-            return Result(cs_t=cs_t, ms_t=ms_t, ks_t=ks_t, ns_t=ns_t)
-
-
-    class Result():
-        def __init__(self, **solution):
-
-            self.solution = solution
-
-        def __str__(self):
-            return self.solution.__str__()
-
-    return (Problem,)
-
-
-@app.cell(hide_code=True)
-def _(mo):
-    mo.md(r"""
-    # Simulation
-    """)
-    return
+    return model_expon, model_gauss, residual
 
 
 @app.cell
-def _(Problem):
-    problem = Problem(
+def _(du):
+    orig_params = du.Params()
+    return (orig_params,)
 
-        # Geometry
-        dendrite_length = 100,
-        inter_spine_distance = 1,
-        idx_stimulus = 50,
 
-        # Calcios in
-        c_stimulus = 3000,
+@app.cell
+def _(
+    du,
+    least_squares,
+    model_expon,
+    model_gauss,
+    np,
+    orig_params,
+    replace,
+    residual,
+    tqdm,
+):
+    res_gauss = dict(K={}, N={})
+    res_expon = dict(K={}, N={})
 
-        # CamKII
-        v_k = 1,
+    solutions = {}
 
-        # Calcineuro
-        v_n = 10,
-        tau_n = 1e-3,
+    influxes = np.linspace(50, 1000, 5)
 
-        # CaM
-        v_m = 1,
+    for influx in tqdm(influxes):
+        params = replace(orig_params, influx = influx)
+        model = du.Model(params)
 
-        k_tot = 600.,
-        n_tot = 100.,
-        m_tot = 400.,
+        _solution = model.simulate()
 
-        diff_c = 200,
+        solutions[influx] = _solution
 
-        # integration step [s] - to convert constants
-        dt = 1e-3,
+        res_gauss['K'][influx] = least_squares(
+            residual,
+            x0=(1.,1.,),
+            args=(_solution.x, _solution.Km[:,-1], model_gauss ),
+        )
 
-        # integration time [s]
-        t_integration = 10
+        res_gauss['N'][influx] = least_squares(
+            residual,
+            x0=(1.,1.,),
+            args=(_solution.x, _solution.Nm[:,-1], model_gauss ),
+        )
+
+        res_expon['K'][influx] = least_squares(
+            residual,
+            x0=(1.,1.,),
+            args=(_solution.x, _solution.Km[:,-1], model_expon ),
+        )
+
+        res_expon['N'][influx] = least_squares(
+            residual,
+            x0=(1.,1.,),
+            args=(_solution.x, _solution.Nm[:,-1], model_expon ),
+        )
+
+    return influxes, res_expon, res_gauss, solutions
+
+
+@app.cell
+def _(
+    influxes,
+    model_expon,
+    model_gauss,
+    np,
+    res_expon,
+    res_gauss,
+    solutions,
+    tqdm,
+):
+    def rrmse(x,y):
+        return np.sqrt(np.mean((x - y)**2))/y.std()
+
+    rmse_gauss = dict(K={}, N={})
+    rmse_expon = dict(K={}, N={})
+
+    for _rgk, _rek, _rgn, _ren, _solution, _influx in tqdm(zip(
+        res_gauss['K'].values(),
+        res_expon['K'].values(),
+        res_gauss['N'].values(),
+        res_expon['N'].values(),
+        solutions.values(),
+        influxes
+    )):
+        rmse_gauss['K'][_influx] = rrmse(model_gauss(_solution.x, _rgk.x), _solution.Km[:,-1])
+        rmse_gauss['N'][_influx] = rrmse(model_gauss(_solution.x, _rgn.x), _solution.Nm[:,-1])
+        rmse_expon['K'][_influx] = rrmse(model_expon(_solution.x, _rek.x), _solution.Km[:,-1])
+        rmse_expon['N'][_influx] = rrmse(model_expon(_solution.x, _ren.x), _solution.Nm[:,-1])
+
+
+    return rmse_expon, rmse_gauss
+
+
+@app.cell
+def _(
+    influxes,
+    model_expon,
+    model_gauss,
+    np,
+    plt,
+    res_expon,
+    res_gauss,
+    rmse_expon,
+    rmse_gauss,
+    solutions,
+):
+    _influx = influxes[0]
+
+    solution = solutions[_influx]
+    x_plot = np.linspace(solution.x.min(), solution.x.max(), 100)
+    rgk, rgn = res_gauss['K'][_influx], res_gauss['N'][_influx]
+    rek, ren = res_expon['K'][_influx], res_expon['N'][_influx]
+
+
+    fig, axs = plt.subplots(1,3, figsize=(12,3), dpi=300)
+
+    ax = axs[0]
+    ax.plot(solution.x, solution.Km[:,-1], color='black', lw=2, label='Simulation')
+    ax.plot(
+        x_plot, model_gauss(x_plot, rgk.x), color='tab:green', lw=3,
+        linestyle=(0,(8,2)),
+        label=f'Gauss fit (RRMSE = {rmse_gauss['K'][_influx]:.2f})'
     )
+    ax.plot(
+        x_plot, model_expon(x_plot, rek.x), lw=1, linestyle=(0,(2,2)), color='tab:green',
+        label=f'Expon fit (RRMSE = {rmse_expon['K'][_influx]:.2f})'
+    )
+    ax.legend(frameon=False, loc='upper left')
+    ax.set_ylim(-0.05,0.9)
+
+    ax.set_xlabel(r'Position relative to induction $[\mu m]$')
+    ax.set_ylabel(r'Activated CaMKII $[\mu M]$')
+    ax.set_title('CaMKII activation profile\n'+rf'(${_influx:.0f}\, \mu M \, Ca^{{2+}}$per uncaging pulse)')
+
+    ax = axs[1]
+    ax.plot(solution.x, solution.Nm[:,-1], color='black', lw=2, label='Simulation')
+    ax.plot(
+        x_plot, model_gauss(x_plot, rgn.x), color='tab:purple', lw=3,
+        linestyle=(0,(8,2)),
+        label=f'Gauss fit (RRMSE = {rmse_gauss['N'][_influx]:.2f})'
+    )
+    ax.plot(
+        x_plot, model_expon(x_plot, ren.x), lw=1, linestyle=(0,(2,2)), color='tab:purple',
+        label=f'Expon fit (RRMSE = {rmse_expon['N'][_influx]:.2f})'
+    )
+    ax.legend(frameon=False, loc='upper left')
+    ax.set_ylim(-0.4,11)
+
+    ax.set_xlabel(r'Position relative to induction $[\mu m]$')
+    ax.set_ylabel(r'Activated CaN $[\mu M]$')
+    ax.set_title('CaN activation profile\n'+rf'(${_influx:.0f}\, \mu M \, Ca^{{2+}}$per uncaging pulse)')
 
 
-    # Assume dt is expressed in s
-    result = problem.solve()
-    return (result,)
+    ax = axs[2]
+    ax.scatter(
+        rmse_gauss['K'].values(), rmse_expon['K'].values(), s=50, marker='o',
+        cmap='Greens', c=solutions.keys(), facecolor='white',
+        ec='tab:green',
+        label='fit to CaMKII'
+    )
+    points = ax.scatter(
+        rmse_gauss['N'].values(), rmse_expon['N'].values(), s=50, marker='o',
+        cmap='Purples', c=solutions.keys(), facecolor='white',
+        label='Fit to CaN', ec='tab:purple'
+    )
+    ax.plot((0.04,0.15), (0.04,0.15), c='black', lw=1, linestyle=(0,(10,4)))
+    plt.colorbar(points)
+
+    ax.legend(frameon=False, loc='lower right')
+    ax.set_xlabel('RRMSE gaussian fit')
+    ax.set_ylabel('RRMSE exponential fit')
+    ax.set_title('Gauss/expon goodness\nof fit comparison')
+
+    fig.subplots_adjust(wspace=0.3)
+    plt.show()
+    return (solution,)
 
 
 @app.cell
-def _(np, plt, result):
-    colors = ["", "", 'tab:green', 'violet']
+def _(du, np, orig_params, replace, tqdm):
+    solutions_spread = {}
 
-    for (k, v), c in zip(result.solution.items(), colors):
-        print(k)
-        if 'k' in k or 'n' in k:
-            v_inf = v[-1]
+    fs = np.arange(1,10, 20, 50, 100)
 
-            x = np.where(v_inf > 0)
-            y = v_inf[x]
+    for _f in tqdm(fs):
+        _params = replace(
+            orig_params,
+            D_K = orig_params.D_K * _f,
+            D_N = orig_params.D_N * _f,
+        )
+        _model = du.Model(_params)
 
-            plt.plot(x[0],y, label=k, color=c)
+        _solution = _model.simulate()
 
-    # plt.ylim(0,2000)
-    plt.legend()
-    return
+        solutions_spread[_f] = _solution
+    return (solutions_spread,)
 
 
 @app.cell
-def _(least_squares, np, plt, result):
-    def plot_fit(species, ax, **kwargs):
-        ks_inf = result.solution[species][-1]
-        x = np.where(ks_inf > 0)
-        y = ks_inf[x]
-        x_plot = x[0]
+def _(np, plt, solution, solutions_spread, trapezoid):
+    ref_K = trapezoid(solutions_spread[1].Km, x=solutions_spread[1].t, axis=1)
+    ref_N = trapezoid(solutions_spread[1].Nm, x=solutions_spread[1].t, axis=1)
 
-        def cauchy(x, mu, a, b):
-            return 1 / a * 1 / (1 + (x - mu) ** 2 / b ** 2)
+    colors = {
+        'K' : plt.cm.Greens(np.linspace(0,1,5)),
+        'N' : plt.cm.Purples(np.linspace(0,1,5)),
+    }
 
-        def gauss(x, sigma, scale):
-            return scale * np.exp(-((x - 250) / sigma) ** 2)
 
-        def res(p, x, y):
-            return y - gauss(x, *p)
-        fitres = least_squares(res, [1, 1], args=(x[0], y), loss='cauchy')
-        ax.scatter(x_plot[::2], y[::2], c='tab:gray', marker='x', s=100, alpha=0.3, label='simulation')
-        ax.plot(x_plot, gauss(x_plot, *fitres.x), **kwargs, label='gauss fit')
-        plt.legend(fontsize=15)
-    _fig = plt.figure(figsize=(8, 6), dpi=300)  # popt, pcov = curve_fit(res, x[0], y)
-    gs = _fig.add_gridspec(nrows=2, ncols=1, height_ratios=[3, 1], hspace=0.1)
-    ax_up = _fig.add_subplot(gs[0])
-    plot_fit('ks_t', ax_up, color='forestgreen', linewidth=4)
-    ax_up.set_xticklabels('')
-    ax_up.set_ylabel('K [A.U.]')
-    _ax = _fig.add_subplot(gs[1], sharex=ax_up)
-    plot_fit('ns_t', _ax, color='mediumvioletred', linewidth=4)
-    _ax.set_xlabel('Position along dendrite [um]')
-    _ax.set_ylabel('N [A.U.]')
+    _fig, _axs = plt.subplots(1,2,figsize=(8,3), sharey=True, dpi=300)
+
+    for _idx, (_f, _ss) in enumerate(solutions_spread.items()):
+        if _idx == 0: continue
+        
+        _K = trapezoid(solutions_spread[_f].Km, x=solutions_spread[_f].t, axis=1)
+        _N = trapezoid(solutions_spread[_f].Nm, x=solutions_spread[_f].t, axis=1)
+    
+        _axs[0].plot(solution.x, (_K - ref_K)/ref_K*100, color=colors['K'][_idx])
+        _axs[1].plot(solution.x, (_N - ref_N)/ref_N*100, color=colors['N'][_idx], label=_f)
+
+    _axs[0].set_ylabel('Relative integrated CaMKII\nchange [%]')
+    _axs[1].set_ylabel('Relative integrated CaN\nchange [%]')
+    _axs[1].legend(frameon=False, loc=(1,0), title=r'$D\,/\,D_0$')
+    _axs[0].set_title('Change in integrated catalytic activity in function of their diffusivity', ha='left', x=0.1, y=1.05)
+
+    for _ax in _axs:
+        _ax.set_xlabel(r'Position relative to induction $[\mu m]$')
+        _ax.axhline(y=0, c='black', lw=0.5, linestyle=(0,(10,2)))
+
+    plt.subplots_adjust(wspace=0.3)
+    plt.show()
     return
 
 
