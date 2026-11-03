@@ -21,13 +21,14 @@ def consistency_plot(experiment, ax):
 
 def plot_snapshot(
     fig,
-    experiment,
+    experiments,
+    keys,
     t_idx,
     x_view: list = [0,100],
     summary="medianiq",
     relative=True,
     y_lims = dict(ps=(0.9, 1.5),ksns=(0, 20),ud=(0.9, 1.1)),
-    # **kwargs,
+    **kwargs,
 ) -> None:
 
     def quick_mapper(key):
@@ -37,30 +38,28 @@ def plot_snapshot(
             experiment.dataset.get_summary(key, relative=relative)
         )
 
+    axs = fig.subplots(len(keys), len(experiments), sharex=True, sharey='row')
+    if len(keys) == 1: axs = axs.reshape(1,-1)
 
-    _ = experiment.get_X_and_mask_from_view(x_view)
-    dendrite_mask, dendrite_X, spine_mask, spine_X = _
+    for col, experiment in zip(axs.T, experiments):
+        _ = experiment.get_X_and_mask_from_view(x_view)
+        dendrite_mask, dendrite_X, spine_mask, spine_X = _
 
-    axs = fig.subplots(3,1,sharex=True)
+        for ax, key in zip(col, keys):
+            xx = dendrite_X if 'd' in key else spine_X
+            style = '-' if 'd' in key else 'o'
+            s = 0 if 'd' in key else 3
 
-    # breakpoint()
-    ax = axs[0]
-    l,m,h = quick_mapper('ps')
-    ax.plot(spine_X, m, '-o')
-    ax.fill_between(spine_X, l, h, alpha=0.2)
-    ax.set_ylim(y_lims['ps'])
+            l,m,h = quick_mapper(key)
 
-    ax = axs[1]
-    l,m,h = quick_mapper('ks')
-    ax.bar(spine_X-0.15, m, width=0.3, yerr=(m-l, h-m), ecolor='forestgreen', color='forestgreen')
-    l,m,h = quick_mapper('ns')
-    ax.bar(spine_X+0.15, m, width=0.3, yerr=(m-l, h-m), ecolor='mediumvioletred', color='mediumvioletred')
-    ax.set_ylim(y_lims['ksns'])
+            ax.plot(xx, m, style, markersize=s, c=kwargs.get(f'{key}_color'))
+            ax.fill_between(xx, l, h, alpha=0.2, color=kwargs.get(f'{key}_color'))
+            ax.set_ylim(y_lims[key])
+            ax.set_xlabel(r'Spine position $[\mu m]$')
 
-    for ax in axs:
-        for x in experiment.xs_stim:
-            ax.axvline(x)
-
+        for ax in col:
+            for x in experiment.xs_stim:
+                ax.axvline(x, c='tab:orange', lw=1, zorder=-10)
 
 def plot_series(
     experiment,
