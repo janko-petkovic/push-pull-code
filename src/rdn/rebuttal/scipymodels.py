@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from numpy import ndarray, ones
+from numpy import ndarray, ones, exp
 
 class ScipyModel(ABC):
 
@@ -7,7 +7,7 @@ class ScipyModel(ABC):
         return y - self.forward(x,p)
 
     @abstractmethod
-    def forward(self, x,p):
+    def forward(self, x,p, *args):
         ...
 
     @abstractmethod
@@ -19,7 +19,7 @@ class ScipyModel(ABC):
         ...
 
 class PowerLaw(ScipyModel):
-    def forward(self, x,p):
+    def forward(self, x,p,*args):
         return x**p[0]
 
     def gen_p0(self):
@@ -29,7 +29,7 @@ class PowerLaw(ScipyModel):
         return 'P'
 
 class PowerLawScale(ScipyModel):
-    def forward(self, x,p):
+    def forward(self, x,p, *args):
         return p[0] * x**p[1]
 
     def gen_p0(self):
@@ -40,12 +40,12 @@ class PowerLawScale(ScipyModel):
 
 
 class PushPullMedian(ScipyModel):
-    def forward(self, x,p):
+    def forward(self, x,p, *args):
         p = 10**p
 
         deltak = p[0]
         deltan = p[1]
-        sbar = p[2]
+        sbar = -p[2]
         e50 = p[3]
 
         return (
@@ -61,13 +61,13 @@ class PushPullMedian(ScipyModel):
 
 class PushPullIQ(ScipyModel):
 
-    def forward(x,p,f):
+    def forward(self, x,p,*args):
         p = 10**p
         # p = pp
         deltak = p[0]
         deltan = p[1]
-        sbar = p[2]
-        e50 = p[3] * np.exp(f)
+        sbar = -p[2]
+        e50 = p[3] *exp(args[0])
 
         return (
             (1 + deltak * e50 * x**(sbar - 1))
