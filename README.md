@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/1110788086.svg)](https://doi.org/10.5281/zenodo.24357314)
+
 # Push-and-pull protein dynamics leads to log-normal synaptic sizes and probabilistic multi-spine plasticity
 
 This repository contains the code used to fit the model and generate the figures
