@@ -95,7 +95,6 @@ def _(
             x0=(1.,1.,),
             args=(_solution.x, _solution.Nm[:,-1], model_expon ),
         )
-
     return influxes, res_expon, res_gauss, solutions
 
 
@@ -128,7 +127,6 @@ def _(
         rmse_gauss['N'][_influx] = rrmse(model_gauss(_solution.x, _rgn.x), _solution.Nm[:,-1])
         rmse_expon['K'][_influx] = rrmse(model_expon(_solution.x, _rek.x), _solution.Km[:,-1])
         rmse_expon['N'][_influx] = rrmse(model_expon(_solution.x, _ren.x), _solution.Nm[:,-1])
-
 
     return rmse_expon, rmse_gauss
 
@@ -222,7 +220,7 @@ def _(
 def _(du, np, orig_params, replace, tqdm):
     solutions_spread = {}
 
-    fs = np.arange(1,10, 20, 50, 100)
+    fs = np.array((1,10, 20, 50, 100))
 
     for _f in tqdm(fs):
         _params = replace(
@@ -253,10 +251,10 @@ def _(np, plt, solution, solutions_spread, trapezoid):
 
     for _idx, (_f, _ss) in enumerate(solutions_spread.items()):
         if _idx == 0: continue
-        
+    
         _K = trapezoid(solutions_spread[_f].Km, x=solutions_spread[_f].t, axis=1)
         _N = trapezoid(solutions_spread[_f].Nm, x=solutions_spread[_f].t, axis=1)
-    
+
         _axs[0].plot(solution.x, (_K - ref_K)/ref_K*100, color=colors['K'][_idx])
         _axs[1].plot(solution.x, (_N - ref_N)/ref_N*100, color=colors['N'][_idx], label=_f)
 
@@ -271,6 +269,11 @@ def _(np, plt, solution, solutions_spread, trapezoid):
 
     plt.subplots_adjust(wspace=0.3)
     plt.show()
+    return
+
+
+@app.cell
+def _():
     return
 
 
